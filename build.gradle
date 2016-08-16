@@ -22,5 +22,5 @@ subprojects {
         jcenter()
     }
     
-    group = "com.netflix.${githubProjectName}"
+    group = "com.netflix.dyno"
 }
