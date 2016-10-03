@@ -35,18 +35,17 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import redis.clients.jedis.JedisCommands;
-import redis.clients.jedis.Tuple;
-
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.google.common.annotations.VisibleForTesting;
 import com.netflix.dyno.connectionpool.exception.DynoException;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
 import com.netflix.servo.monitor.Stopwatch;
+
+import redis.clients.jedis.JedisCommands;
+import redis.clients.jedis.Tuple;
 
 /**
  * 
