@@ -219,9 +219,9 @@ public class RedisDynoQueue implements DynoQueue {
 
 				Set<String> ids = new HashSet<>();
 				if (logger.isDebugEnabled()) {
-					logger.debug("prefetchedIds.size=" + prefetchedIds.size());
+					logger.debug("{} prefetchedIds.size={}", queueName, prefetchedIds.size());
 				}
-				if (prefetchedIds.isEmpty()) {
+				if (prefetchedIds.size() < messageCount) {
 					prefetch.set(true);
 					String id = prefetchedIds.poll(wait, unit);
 					if (id != null) {
@@ -474,8 +474,7 @@ public class RedisDynoQueue implements DynoQueue {
 		
 	}
 
-	@VisibleForTesting
-	void processUnacks() {
+	public void processUnacks() {
 
 		Stopwatch sw = monitor.processUnack.start();
 		try {
@@ -555,7 +554,7 @@ public class RedisDynoQueue implements DynoQueue {
 			
 			if (e.getCause() instanceof DynoException) {
 				if (retryCount < this.retryCount) {
-					//return executeWithRetry(es, r, ++retryCount);
+					return executeWithRetry(es, r, ++retryCount);
 				}
 			}
 			throw new RuntimeException(e.getCause());
