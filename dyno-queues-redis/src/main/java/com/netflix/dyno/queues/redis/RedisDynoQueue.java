@@ -35,18 +35,17 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import redis.clients.jedis.JedisCommands;
-import redis.clients.jedis.Tuple;
-
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.google.common.annotations.VisibleForTesting;
 import com.netflix.dyno.connectionpool.exception.DynoException;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
 import com.netflix.servo.monitor.Stopwatch;
+
+import redis.clients.jedis.JedisCommands;
+import redis.clients.jedis.Tuple;
 
 /**
  * 
@@ -219,9 +218,9 @@ public class RedisDynoQueue implements DynoQueue {
 
 				Set<String> ids = new HashSet<>();
 				if (logger.isDebugEnabled()) {
-					logger.debug("prefetchedIds.size=" + prefetchedIds.size());
+					logger.debug("{} prefetchedIds.size={}", queueName, prefetchedIds.size());
 				}
-				if (prefetchedIds.isEmpty()) {
+				if (prefetchedIds.size() < messageCount) {
 					prefetch.set(true);
 					String id = prefetchedIds.poll(wait, unit);
 					if (id != null) {
@@ -474,8 +473,7 @@ public class RedisDynoQueue implements DynoQueue {
 		
 	}
 
-	@VisibleForTesting
-	void processUnacks() {
+	public void processUnacks() {
 
 		Stopwatch sw = monitor.processUnack.start();
 		try {
@@ -555,7 +553,7 @@ public class RedisDynoQueue implements DynoQueue {
 			
 			if (e.getCause() instanceof DynoException) {
 				if (retryCount < this.retryCount) {
-					//return executeWithRetry(es, r, ++retryCount);
+					return executeWithRetry(es, r, ++retryCount);
 				}
 			}
 			throw new RuntimeException(e.getCause());
