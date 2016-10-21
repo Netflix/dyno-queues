@@ -36,6 +36,7 @@ import redis.clients.jedis.ScanParams;
 import redis.clients.jedis.ScanResult;
 import redis.clients.jedis.Tuple;
 import redis.clients.jedis.exceptions.JedisException;
+import redis.clients.jedis.params.sortedset.ZAddParams;
 
 /**
  * @author Viren
@@ -727,6 +728,27 @@ public class JedisMock extends Jedis {
 			throw new JedisException(e);
 		}
 	}
+	
+	@Override
+	public Long zadd(String key, double score, String member, ZAddParams params) {
+		
+		try {
+			
+			if(params.contains("xx")) {
+				Double existing = redis.zscore(key, member);
+				if(existing == null) {
+					return 0L;
+				}
+				return redis.zadd(key, new ZsetPair(member, score));
+			}else {
+				return redis.zadd(key, new ZsetPair(member, score));
+			}
+			
+		} catch (Exception e) {
+			throw new JedisException(e);
+		}
+	}
+	
 
 	@Override
 	public Long zadd(final String key, final Map<String, Double> scoreMembers) {
