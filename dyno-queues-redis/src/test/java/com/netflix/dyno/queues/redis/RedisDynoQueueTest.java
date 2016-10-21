@@ -21,10 +21,13 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -49,7 +52,7 @@ public class RedisDynoQueueTest {
 
 	private static final String redisKeyPrefix = "testdynoqueues";
 
-	private static DynoQueue rdq;
+	private static RedisDynoQueue rdq;
 
 	private static RedisQueues rq;
 	
@@ -62,7 +65,7 @@ public class RedisDynoQueueTest {
 			@Override
 			public Collection<Host> getHosts() {
 				List<Host> hosts = new LinkedList<>();
-				hosts.add(new Host("ec2-54-80-14-177.compute-1.amazonaws.com", 8102, Status.Up).setRack("us-east-1d"));
+				hosts.add(new Host("ec2-11-22-33-444.compute-0.amazonaws.com", 8102, Status.Up).setRack("us-east-1d"));
 				return hosts;
 			}
 		};
@@ -89,10 +92,11 @@ public class RedisDynoQueueTest {
 		DynoQueue rdq1 = rq.get(queueName);
 		assertNotNull(rdq1);
 
-		rdq = rq.get(queueName);
+		rdq = (RedisDynoQueue)rq.get(queueName);
 		assertNotNull(rdq);
 
 		assertEquals(rdq1, rdq); // should be the same instance.		
+		
 	}
 
 	@Test
@@ -105,6 +109,60 @@ public class RedisDynoQueueTest {
 		assertEquals(1_000, rdq.getUnackTime());
 	}
 
+	@Test
+	public void testTimeoutUpdate() {
+		rdq.clear();
+		
+		String id = UUID.randomUUID().toString();
+		Message msg = new Message(id, "Hello World-" + id);
+		msg.setTimeout(100, TimeUnit.MILLISECONDS);
+		rdq.push(Arrays.asList(msg));
+		
+		List<Message> popped = rdq.pop(1, 10, TimeUnit.MILLISECONDS);
+		assertNotNull(popped);
+		assertEquals(0, popped.size());
+
+		Uninterruptibles.sleepUninterruptibly(500, TimeUnit.MILLISECONDS);
+		rdq.prefetch();
+		
+		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
+		assertNotNull(popped);
+		assertEquals(1, popped.size());
+		
+		rdq.setUnackTimeout(id, 500);
+		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
+		assertNotNull(popped);
+		assertEquals(0, popped.size());
+		
+		Uninterruptibles.sleepUninterruptibly(1000, TimeUnit.MILLISECONDS);
+		rdq.processUnacks();
+		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
+		assertNotNull(popped);
+		assertEquals(1, popped.size());
+		
+		rdq.setUnackTimeout(id, 10_000);	//10 seconds!
+		rdq.processUnacks();
+		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
+		assertNotNull(popped);
+		assertEquals(0, popped.size());
+		
+		rdq.setUnackTimeout(id, 0);
+		rdq.processUnacks();
+		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
+		assertNotNull(popped);
+		assertEquals(1, popped.size());
+		
+		rdq.ack(id);
+		Map<String, Map<String, Long>> size = rdq.shardSizes();
+		Map<String, Long> values = size.get("1d");
+		long total = values.values().stream().mapToLong(v -> v).sum();
+		assertEquals(0, total);
+		
+		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
+		assertNotNull(popped);
+		assertEquals(0, popped.size());
+	}
+	
 	@Test
 	public void testAll() {
 

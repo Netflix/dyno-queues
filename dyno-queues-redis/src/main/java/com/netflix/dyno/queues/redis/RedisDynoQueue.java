@@ -39,6 +39,7 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.google.common.annotations.VisibleForTesting;
 import com.netflix.dyno.connectionpool.exception.DynoException;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
@@ -84,7 +85,7 @@ public class RedisDynoQueue implements DynoQueue {
 	
 	private LinkedBlockingQueue<String> prefetchedIds;
 	
-	private int prefetchCount = 10000;
+	private int prefetchCount = 10_000;
 	
 	private int retryCount = 2;
 
@@ -248,6 +249,12 @@ public class RedisDynoQueue implements DynoQueue {
 	
 	private AtomicBoolean prefetch = new AtomicBoolean(false);
 	
+	@VisibleForTesting
+	void prefetch() {
+		prefetch.set(true);
+		prefetchIds();
+	}
+	
 	private void prefetchIds() {
 
 		if (!prefetch.get()) {
@@ -336,6 +343,32 @@ public class RedisDynoQueue implements DynoQueue {
 					Long removed = quorumConn.zrem(unackShardKey, messageId);
 					if (removed > 0) {
 						quorumConn.hdel(messageStoreKey, messageId);
+						return true;
+					}
+				}
+				return false;
+			});
+
+		} finally {
+			sw.stop();
+		}
+	}
+	
+	@Override
+	public boolean setUnackTimeout(String messageId, long timeout) {
+
+		Stopwatch sw = monitor.ack.start();
+
+		try {
+			
+			return execute(() -> {
+
+				for (String shard : allShards) {
+					String unackShardKey = getUnackKey(queueName, shard);
+					Long removed = quorumConn.zrem(unackShardKey, messageId);
+					if (removed > 0) {
+						double unackScore = Long.valueOf(System.currentTimeMillis() + timeout).doubleValue();
+						quorumConn.zadd(unackShardKey, unackScore, messageId);
 						return true;
 					}
 				}
@@ -547,7 +580,7 @@ public class RedisDynoQueue implements DynoQueue {
 
 		try {
 
-			return es.submit(r).get(10, TimeUnit.SECONDS);
+			return es.submit(r).get(1000, TimeUnit.SECONDS);		//TODO: replace this with 10
 
 		} catch (ExecutionException e) {
 			
