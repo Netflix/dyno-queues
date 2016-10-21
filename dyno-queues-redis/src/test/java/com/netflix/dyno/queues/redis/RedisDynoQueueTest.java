@@ -129,7 +129,8 @@ public class RedisDynoQueueTest {
 		assertNotNull(popped);
 		assertEquals(1, popped.size());
 		
-		rdq.setUnackTimeout(id, 500);
+		boolean updated = rdq.setUnackTimeout(id, 500);
+		assertTrue(updated);
 		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
 		assertNotNull(popped);
 		assertEquals(0, popped.size());
@@ -140,13 +141,15 @@ public class RedisDynoQueueTest {
 		assertNotNull(popped);
 		assertEquals(1, popped.size());
 		
-		rdq.setUnackTimeout(id, 10_000);	//10 seconds!
+		updated = rdq.setUnackTimeout(id, 10_000);	//10 seconds!
+		assertTrue(updated);
 		rdq.processUnacks();
 		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
 		assertNotNull(popped);
 		assertEquals(0, popped.size());
 		
-		rdq.setUnackTimeout(id, 0);
+		updated = rdq.setUnackTimeout(id, 0);
+		assertTrue(updated);
 		rdq.processUnacks();
 		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
 		assertNotNull(popped);

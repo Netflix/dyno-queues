@@ -80,9 +80,9 @@ public interface DynoQueue {
 	 * Sets the unack timeout on the message (changes the default timeout to the new value).  Useful when extended lease is required for a message by consumer before sending ack.
 	 * @param messageId ID of the message to be acknowledged
 	 * @param timeout time in milliseconds for which the message will remain in un-ack state.  If no ack is received after the timeout period has expired, the message is put back into the queue
-	 * 
+	 * @return true if the message id was found and updated with new timeout.  false otherwise.
 	 */
-	public void setUnackTimeout(String messageId, long timeout);
+	public boolean setUnackTimeout(String messageId, long timeout);
 	
 	/**
 	 * 

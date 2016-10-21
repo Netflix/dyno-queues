@@ -47,7 +47,6 @@ import com.netflix.servo.monitor.Stopwatch;
 
 import redis.clients.jedis.JedisCommands;
 import redis.clients.jedis.Tuple;
-import redis.clients.jedis.params.sortedset.ZAddParams;
 
 /**
  * 
@@ -356,21 +355,24 @@ public class RedisDynoQueue implements DynoQueue {
 	}
 	
 	@Override
-	public void setUnackTimeout(String messageId, long timeout) {
+	public boolean setUnackTimeout(String messageId, long timeout) {
 
 		Stopwatch sw = monitor.ack.start();
 
 		try {
 			
-			execute(() -> {
+			return execute(() -> {
 				double unackScore = Long.valueOf(System.currentTimeMillis() + timeout).doubleValue();
 				for (String shard : allShards) {
 					
 					String unackShardKey = getUnackKey(queueName, shard);
-					ZAddParams params = ZAddParams.zAddParams().xx();
-					quorumConn.zadd(unackShardKey, unackScore, messageId, params);
+					Double score = quorumConn.zscore(unackShardKey, messageId);
+					if(score != null) {
+						quorumConn.zadd(unackShardKey, unackScore, messageId);
+						return true;
+					}
 				}
-				return true;
+				return false;
 			});
 
 		} finally {

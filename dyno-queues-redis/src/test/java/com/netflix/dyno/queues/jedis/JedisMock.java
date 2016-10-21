@@ -859,7 +859,7 @@ public class JedisMock extends Jedis {
 	@Override
 	public Double zscore(final String key, final String member) {
 		try {
-			return zscore(key, member);
+			return redis.zscore(key, member);
 		} catch (Exception e) {
 			throw new JedisException(e);
 		}
