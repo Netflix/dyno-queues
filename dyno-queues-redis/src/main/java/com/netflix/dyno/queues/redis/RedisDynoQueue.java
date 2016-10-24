@@ -362,12 +362,12 @@ public class RedisDynoQueue implements DynoQueue {
 		try {
 			
 			return execute(() -> {
-
+				double unackScore = Long.valueOf(System.currentTimeMillis() + timeout).doubleValue();
 				for (String shard : allShards) {
+					
 					String unackShardKey = getUnackKey(queueName, shard);
-					Long removed = quorumConn.zrem(unackShardKey, messageId);
-					if (removed > 0) {
-						double unackScore = Long.valueOf(System.currentTimeMillis() + timeout).doubleValue();
+					Double score = quorumConn.zscore(unackShardKey, messageId);
+					if(score != null) {
 						quorumConn.zadd(unackShardKey, unackScore, messageId);
 						return true;
 					}
@@ -580,7 +580,7 @@ public class RedisDynoQueue implements DynoQueue {
 
 		try {
 
-			return es.submit(r).get(1000, TimeUnit.SECONDS);		//TODO: replace this with 10
+			return es.submit(r).get(10, TimeUnit.SECONDS);
 
 		} catch (ExecutionException e) {
 			
