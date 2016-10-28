@@ -65,7 +65,7 @@ public class RedisDynoQueueTest {
 			@Override
 			public Collection<Host> getHosts() {
 				List<Host> hosts = new LinkedList<>();
-				hosts.add(new Host("ec2-11-22-33-444.compute-0.amazonaws.com", 8102, "us-east-1d", Status.Up));
+				hosts.add(new Host("ec2-11-22-33-444.compute-0.amazonaws.com", 8102, Status.Up).setRack("us-east-1d"));
 				return hosts;
 			}
 		};
