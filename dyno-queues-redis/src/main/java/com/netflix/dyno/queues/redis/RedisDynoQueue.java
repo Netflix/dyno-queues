@@ -47,6 +47,7 @@ import com.netflix.servo.monitor.Stopwatch;
 
 import redis.clients.jedis.JedisCommands;
 import redis.clients.jedis.Tuple;
+import redis.clients.jedis.params.sortedset.ZAddParams;
 
 /**
  * 
@@ -284,10 +285,10 @@ public class RedisDynoQueue implements DynoQueue {
 		String unackQueueName = getUnackKey(queueName, shardName);
 
 		List<Message> popped = new LinkedList<>();
-		
+		ZAddParams zParams = ZAddParams.zAddParams().nx();
 		for (String msgId : ids) {
-			
-			long added = quorumConn.zadd(unackQueueName, unackScore, msgId);
+
+			long added = quorumConn.zadd(unackQueueName, unackScore, msgId, zParams);
 			if(added == 0){
 				if (logger.isDebugEnabled()) {
 					logger.debug("cannot add to the unack shard " + msgId);
