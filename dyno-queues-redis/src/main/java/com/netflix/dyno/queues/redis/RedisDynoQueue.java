@@ -28,7 +28,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -86,8 +85,6 @@ public class RedisDynoQueue implements DynoQueue {
 	
 	private LinkedBlockingQueue<String> prefetchedIds;
 	
-	private int prefetchCount = 10_000;
-	
 	private int retryCount = 2;
 
 	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, ExecutorService dynoCallExecutor){
@@ -112,7 +109,7 @@ public class RedisDynoQueue implements DynoQueue {
 		this.executorService = dynoCallExecutor;
 		
 		Executors.newScheduledThreadPool(1).scheduleAtFixedRate(() -> processUnacks(), unackScheduleInMS, unackScheduleInMS, TimeUnit.MILLISECONDS);
-		Executors.newScheduledThreadPool(1).scheduleAtFixedRate(() -> prefetchIds(), 0, 20, TimeUnit.MILLISECONDS);
+		Executors.newScheduledThreadPool(1).scheduleAtFixedRate(() -> prefetchIds(), 0, 10, TimeUnit.MILLISECONDS);
 		
 		logger.info(RedisDynoQueue.class.getName() + " is ready to serve " + queueName);
 		
@@ -216,31 +213,27 @@ public class RedisDynoQueue implements DynoQueue {
 
 		try {
 
-			return (List<Message>) execute(() -> {
+			List<Message> messages = (List<Message>)execute(() -> {
 
 				Set<String> ids = new HashSet<>();
-				if (logger.isDebugEnabled()) {
-					logger.debug("{} prefetchedIds.size={}", queueName, prefetchedIds.size());
-				}
+				
 				if (prefetchedIds.size() < messageCount) {
-					prefetch.set(true);
+					prefetch.addAndGet(messageCount - prefetchedIds.size());
 					String id = prefetchedIds.poll(wait, unit);
 					if (id != null) {
 						ids.add(id);
 					}
 				}
 				prefetchedIds.drainTo(ids, messageCount);
-				if (ids.size() < messageCount) {
-					prefetch.set(true);
-				}
 
 				if (ids.isEmpty()) {
 					return Collections.emptyList();
 				}
-
 				return _pop(ids, messageCount);
 
 			});
+			
+			return messages;
 
 		} finally {
 			sw.stop();
@@ -248,32 +241,26 @@ public class RedisDynoQueue implements DynoQueue {
 
 	}
 	
-	private AtomicBoolean prefetch = new AtomicBoolean(false);
-	
 	@VisibleForTesting
-	void prefetch() {
-		prefetch.set(true);
-		prefetchIds();
-	}
+	AtomicInteger prefetch = new AtomicInteger(0);
 	
 	private void prefetchIds() {
 
-		if (!prefetch.get()) {
+		if (prefetch.get() < 1) {
 			return;
 		}
-
+		
+		int prefetchCount = prefetch.get();
 		Stopwatch sw = monitor.start(monitor.prefetch, prefetchCount);
 		try {
 			
-			execute(() -> {
-				Set<String> ids = peekIds(0, prefetchCount);
-				prefetchedIds.addAll(ids);
-				prefetch.set(false);
-				return null;
-			});
-			
+			Set<String> ids = peekIds(0, prefetchCount);
+			prefetchedIds.addAll(ids);
+			prefetch.addAndGet((-1 * ids.size()));
+			if(prefetch.get() < 0 || ids.isEmpty()) {
+				prefetch.set(0);
+			}
 		} finally {
-
 			sw.stop();
 		}
 
@@ -379,6 +366,39 @@ public class RedisDynoQueue implements DynoQueue {
 		} finally {
 			sw.stop();
 		}
+	}
+	
+	@Override
+	public boolean setTimeout(String messageId, long timeout) {
+		
+		return execute(() -> {
+			
+			String json = nonQuorumConn.hget(messageStoreKey, messageId);
+			if(json == null) {
+				return false;
+			}
+			Message message = om.readValue(json, Message.class);
+			message.setTimeout(timeout);
+			
+			for (String shard : allShards) {
+				
+				String queueShard = getQueueShardKey(queueName, shard);
+				Double score = quorumConn.zscore(queueShard, messageId);
+				if(score != null) {
+					double priorityd = message.getPriority() / 100;
+					double newScore = Long.valueOf(System.currentTimeMillis() + timeout).doubleValue() + priorityd;
+					ZAddParams params = ZAddParams.zAddParams().xx();
+					long added = quorumConn.zadd(queueShard, newScore, messageId, params);
+					if(added == 1) {
+						json = om.writeValueAsString(message);
+						quorumConn.hset(messageStoreKey, message.getId(), json);
+						return true;
+					}
+					return false;
+				}
+			}
+			return false;
+		});
 	}
 
 	@Override
@@ -542,8 +562,6 @@ public class RedisDynoQueue implements DynoQueue {
 					quorumConn.zadd(myQueueShard, score, member);
 					quorumConn.zrem(unackQueueName, member);
 				}
-
-				prefetchIds();
 				return null;
 			});
 
@@ -581,7 +599,7 @@ public class RedisDynoQueue implements DynoQueue {
 
 		try {
 
-			return es.submit(r).get(10, TimeUnit.SECONDS);
+			return es.submit(r).get(1, TimeUnit.MINUTES);
 
 		} catch (ExecutionException e) {
 			
@@ -595,5 +613,5 @@ public class RedisDynoQueue implements DynoQueue {
 			throw new RuntimeException(e);
 		}
 	}
-
+	
 }

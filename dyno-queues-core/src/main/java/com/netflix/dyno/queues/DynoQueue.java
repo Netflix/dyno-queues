@@ -84,6 +84,15 @@ public interface DynoQueue {
 	 */
 	public boolean setUnackTimeout(String messageId, long timeout);
 	
+	
+	/**
+	 * Updates the timeout for the message.  
+	 * @param messageId ID of the message to be acknowledged
+	 * @param timeout time in milliseconds for which the message will remain invisible and not popped out of the queue.
+	 * @return true if the message id was found and updated with new timeout.  false otherwise.
+	 */
+	public boolean setTimeout(String messageId, long timeout);
+	
 	/**
 	 * 
 	 * @param messageId  Remove the message from the queue

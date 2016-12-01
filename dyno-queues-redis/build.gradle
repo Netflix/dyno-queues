@@ -1,13 +1,20 @@
 apply plugin: 'project-report'
     
 dependencies {
+    
     compile  project(':dyno-queues-core')
+    
     compile "com.google.inject:guice:3.0"
-    compile "com.netflix.dyno:dyno-jedis:1.4.7"
+    compile "com.netflix.dyno:dyno-jedis:1.5.6"
     compile "com.netflix.archaius:archaius-core:0.5.6"
     compile "com.netflix.servo:servo-core:0.5.5"
     compile 'com.netflix.eureka:eureka-client:1.1.110'
     compile 'com.fasterxml.jackson.core:jackson-databind:2.4.4'
+    
     testCompile 'org.rarefiedredis.redis:redis-java:0.0.17'
     testCompile "junit:junit:4.11"
+}
+
+tasks.withType(Test)  {
+  maxParallelForks = 1
 }
