@@ -28,7 +28,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -86,8 +85,6 @@ public class RedisDynoQueue implements DynoQueue {
 	
 	private LinkedBlockingQueue<String> prefetchedIds;
 	
-	private int prefetchCount = 10_000;
-	
 	private int retryCount = 2;
 
 	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, ExecutorService dynoCallExecutor){
@@ -112,7 +109,7 @@ public class RedisDynoQueue implements DynoQueue {
 		this.executorService = dynoCallExecutor;
 		
 		Executors.newScheduledThreadPool(1).scheduleAtFixedRate(() -> processUnacks(), unackScheduleInMS, unackScheduleInMS, TimeUnit.MILLISECONDS);
-		Executors.newScheduledThreadPool(1).scheduleAtFixedRate(() -> prefetchIds(), 0, 20, TimeUnit.MILLISECONDS);
+		Executors.newScheduledThreadPool(1).scheduleAtFixedRate(() -> prefetchIds(), 0, 10, TimeUnit.MILLISECONDS);
 		
 		logger.info(RedisDynoQueue.class.getName() + " is ready to serve " + queueName);
 		
@@ -204,7 +201,6 @@ public class RedisDynoQueue implements DynoQueue {
 		}
 	}
 	
-	@SuppressWarnings("unchecked")
 	@Override
 	public List<Message> pop(int messageCount, int wait, TimeUnit unit) {
 
@@ -216,31 +212,27 @@ public class RedisDynoQueue implements DynoQueue {
 
 		try {
 
-			return (List<Message>) execute(() -> {
+			List<Message> messages = execute(() -> {
 
 				Set<String> ids = new HashSet<>();
-				if (logger.isDebugEnabled()) {
-					logger.debug("{} prefetchedIds.size={}", queueName, prefetchedIds.size());
-				}
+				
 				if (prefetchedIds.size() < messageCount) {
-					prefetch.set(true);
+					prefetch.addAndGet(messageCount - prefetchedIds.size());
 					String id = prefetchedIds.poll(wait, unit);
 					if (id != null) {
 						ids.add(id);
 					}
 				}
 				prefetchedIds.drainTo(ids, messageCount);
-				if (ids.size() < messageCount) {
-					prefetch.set(true);
-				}
 
 				if (ids.isEmpty()) {
 					return Collections.emptyList();
 				}
-
 				return _pop(ids, messageCount);
 
 			});
+			
+			return messages;
 
 		} finally {
 			sw.stop();
@@ -248,32 +240,26 @@ public class RedisDynoQueue implements DynoQueue {
 
 	}
 	
-	private AtomicBoolean prefetch = new AtomicBoolean(false);
-	
 	@VisibleForTesting
-	void prefetch() {
-		prefetch.set(true);
-		prefetchIds();
-	}
+	AtomicInteger prefetch = new AtomicInteger(0);
 	
 	private void prefetchIds() {
 
-		if (!prefetch.get()) {
+		if (prefetch.get() < 1) {
 			return;
 		}
-
+		
+		int prefetchCount = prefetch.get();
 		Stopwatch sw = monitor.start(monitor.prefetch, prefetchCount);
 		try {
 			
-			execute(() -> {
-				Set<String> ids = peekIds(0, prefetchCount);
-				prefetchedIds.addAll(ids);
-				prefetch.set(false);
-				return null;
-			});
-			
+			Set<String> ids = peekIds(0, prefetchCount);
+			prefetchedIds.addAll(ids);
+			prefetch.addAndGet((-1 * ids.size()));
+			if(prefetch.get() < 0 || ids.isEmpty()) {
+				prefetch.set(0);
+			}
 		} finally {
-
 			sw.stop();
 		}
 
@@ -542,8 +528,6 @@ public class RedisDynoQueue implements DynoQueue {
 					quorumConn.zadd(myQueueShard, score, member);
 					quorumConn.zrem(unackQueueName, member);
 				}
-
-				prefetchIds();
 				return null;
 			});
 
@@ -581,7 +565,7 @@ public class RedisDynoQueue implements DynoQueue {
 
 		try {
 
-			return es.submit(r).get(10, TimeUnit.SECONDS);
+			return es.submit(r).get(1, TimeUnit.MINUTES);
 
 		} catch (ExecutionException e) {
 			
@@ -595,5 +579,5 @@ public class RedisDynoQueue implements DynoQueue {
 			throw new RuntimeException(e);
 		}
 	}
-
+	
 }

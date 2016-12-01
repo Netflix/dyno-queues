@@ -21,14 +21,25 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import org.junit.After;
@@ -65,7 +76,7 @@ public class RedisDynoQueueTest {
 			@Override
 			public Collection<Host> getHosts() {
 				List<Host> hosts = new LinkedList<>();
-				hosts.add(new Host("ec2-11-22-33-444.compute-0.amazonaws.com", 8102, Status.Up).setRack("us-east-1d"));
+				hosts.add(new Host("ec2-11-22-33-444.compute-0.amazonaws.com", 8102, "us-east-1d", Status.Up));
 				return hosts;
 			}
 		};
@@ -123,7 +134,6 @@ public class RedisDynoQueueTest {
 		assertEquals(0, popped.size());
 
 		Uninterruptibles.sleepUninterruptibly(500, TimeUnit.MILLISECONDS);
-		rdq.prefetch();
 		
 		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
 		assertNotNull(popped);
@@ -164,6 +174,67 @@ public class RedisDynoQueueTest {
 		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
 		assertNotNull(popped);
 		assertEquals(0, popped.size());
+	}
+	
+	@Test
+	public void testConcurrency() throws InterruptedException, ExecutionException {
+		
+		rdq.clear();
+		
+		final int count = 100;
+		final AtomicInteger published = new AtomicInteger(0);
+		
+		ScheduledExecutorService ses = Executors.newScheduledThreadPool(6);
+		Runnable publisher = new Runnable() {
+
+			@Override
+			public void run() {
+				List<Message> messages = new LinkedList<>();
+				for (int i = 0; i < 10; i++) {
+					Message msg = new Message(UUID.randomUUID().toString(), "Hello World-" + i);
+					msg.setPriority(new Random().nextInt(98));
+					messages.add(msg);
+				}
+				if(published.get() >= count) {
+					return;
+				}
+				
+				published.addAndGet(messages.size());
+				rdq.push(messages);
+				
+			}
+		};
+		
+		for(int p = 0; p < 3; p++) {
+			ses.scheduleWithFixedDelay(publisher, 1, 1, TimeUnit.MILLISECONDS);
+		}
+		
+		CountDownLatch latch = new CountDownLatch(count);
+		List<Message> allMsgs = new LinkedList<>();
+		Runnable consumer = new Runnable() {
+
+			@Override
+			public void run() {
+				List<Message> popped = rdq.pop(15, 1, TimeUnit.SECONDS);
+				allMsgs.addAll(popped);
+				popped.stream().forEach(p -> latch.countDown());
+			}
+		};
+		
+		for(int c = 0; c < 3; c++) {
+			ses.scheduleWithFixedDelay(consumer, 1, 1, TimeUnit.MILLISECONDS);
+		}
+		
+		Uninterruptibles.awaitUninterruptibly(latch);
+		Set<Message> uniqueMessages = allMsgs.stream().collect(Collectors.toSet());
+
+		assertEquals(count, allMsgs.size());
+		assertEquals(count, uniqueMessages.size());
+		List<Message> more = rdq.pop(1, 1, TimeUnit.SECONDS);
+		assertEquals(0, more.size());
+		assertEquals(0, rdq.prefetch.get());
+		
+		ses.shutdownNow();
 	}
 	
 	@Test
