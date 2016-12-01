@@ -26,12 +26,18 @@ import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import org.junit.After;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -111,6 +117,7 @@ public class RedisDynoQueueTest {
 
 	@Test
 	public void testTimeoutUpdate() {
+		
 		rdq.clear();
 		
 		String id = UUID.randomUUID().toString();
@@ -123,7 +130,6 @@ public class RedisDynoQueueTest {
 		assertEquals(0, popped.size());
 
 		Uninterruptibles.sleepUninterruptibly(500, TimeUnit.MILLISECONDS);
-		rdq.prefetch();
 		
 		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
 		assertNotNull(popped);
@@ -167,8 +173,89 @@ public class RedisDynoQueueTest {
 	}
 	
 	@Test
-	public void testAll() {
+	public void testConcurrency() throws InterruptedException, ExecutionException {
+		
+		rdq.clear();
+		
+		final int count = 100;
+		final AtomicInteger published = new AtomicInteger(0);
+		
+		ScheduledExecutorService ses = Executors.newScheduledThreadPool(6);
+		Runnable publisher = new Runnable() {
 
+			@Override
+			public void run() {
+				List<Message> messages = new LinkedList<>();
+				for (int i = 0; i < 10; i++) {
+					Message msg = new Message(UUID.randomUUID().toString(), "Hello World-" + i);
+					msg.setPriority(new Random().nextInt(98));
+					messages.add(msg);
+				}
+				if(published.get() >= count) {
+					return;
+				}
+				
+				published.addAndGet(messages.size());
+				rdq.push(messages);
+				
+			}
+		};
+		
+		for(int p = 0; p < 3; p++) {
+			ses.scheduleWithFixedDelay(publisher, 1, 1, TimeUnit.MILLISECONDS);
+		}
+		
+		CountDownLatch latch = new CountDownLatch(count);
+		List<Message> allMsgs = new LinkedList<>();
+		Runnable consumer = new Runnable() {
+
+			@Override
+			public void run() {
+				List<Message> popped = rdq.pop(15, 1, TimeUnit.SECONDS);
+				allMsgs.addAll(popped);
+				popped.stream().forEach(p -> latch.countDown());
+			}
+		};
+		
+		for(int c = 0; c < 3; c++) {
+			ses.scheduleWithFixedDelay(consumer, 1, 1, TimeUnit.MILLISECONDS);
+		}
+		
+		Uninterruptibles.awaitUninterruptibly(latch);
+		Set<Message> uniqueMessages = allMsgs.stream().collect(Collectors.toSet());
+
+		assertEquals(count, allMsgs.size());
+		assertEquals(count, uniqueMessages.size());
+		List<Message> more = rdq.pop(1, 1, TimeUnit.SECONDS);
+		assertEquals(0, more.size());
+		assertEquals(0, rdq.prefetch.get());
+		
+		ses.shutdownNow();
+	}
+	
+	@Test
+	public void testSetTimeout() {
+		
+		rdq.clear();
+		
+		Message msg = new Message("x001", "Hello World");
+		msg.setPriority(3);
+		msg.setTimeout(20_000);
+		rdq.push(Arrays.asList(msg));
+		
+		List<Message> popped = rdq.pop(1, 1, TimeUnit.SECONDS);
+		assertTrue(popped.isEmpty());
+		
+		boolean updated = rdq.setTimeout(msg.getId(), 1);
+		assertTrue(updated);
+		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
+		assertEquals(1, popped.size());
+		assertEquals(1, popped.get(0).getTimeout());
+	}
+	
+	@Test
+	public void testAll() {
+		
 		rdq.clear();
 		
 		int count = 10;
@@ -244,7 +331,7 @@ public class RedisDynoQueueTest {
 
 	}
 
-	@After
+	@Before
 	public void clear(){
 		rdq.clear();
 		assertTrue(dynoClient.hlen(messageKey) == 0);

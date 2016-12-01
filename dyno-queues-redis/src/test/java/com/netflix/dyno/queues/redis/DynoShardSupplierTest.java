@@ -47,8 +47,9 @@ public class DynoShardSupplierTest {
 			public Collection<Host> getHosts() {
 				List<Host> hosts = new LinkedList<>();
 				hosts.add(new Host("host1", 8102, "us-east-1a", Status.Up));
-				hosts.add(new Host("host2", 8102, "us-east-1b", Status.Up));
-				hosts.add(new Host("host3", 8102, "us-east-1d", Status.Up));
+				hosts.add(new Host("host1", 8102, "us-east-1b", Status.Up));
+				hosts.add(new Host("host1", 8102, "us-east-1d", Status.Up));
+				
 				return hosts;
 			}
 		};
