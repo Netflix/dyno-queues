@@ -117,6 +117,7 @@ public class RedisDynoQueueTest {
 
 	@Test
 	public void testTimeoutUpdate() {
+		
 		rdq.clear();
 		
 		String id = UUID.randomUUID().toString();

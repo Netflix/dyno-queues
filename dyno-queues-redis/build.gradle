@@ -14,3 +14,7 @@ dependencies {
     testCompile 'org.rarefiedredis.redis:redis-java:0.0.17'
     testCompile "junit:junit:4.11"
 }
+
+tasks.withType(Test)  {
+  maxParallelForks = 1
+}
