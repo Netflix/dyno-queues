@@ -739,7 +739,8 @@ public class JedisMock extends Jedis {
 				if(existing == null) {
 					return 0L;
 				}
-				return redis.zadd(key, new ZsetPair(member, score));
+				redis.zadd(key, new ZsetPair(member, score));
+				return 1L;
 			}else {
 				return redis.zadd(key, new ZsetPair(member, score));
 			}

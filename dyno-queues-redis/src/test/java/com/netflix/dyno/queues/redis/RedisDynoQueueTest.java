@@ -21,28 +21,23 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import org.junit.After;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -238,8 +233,28 @@ public class RedisDynoQueueTest {
 	}
 	
 	@Test
+	public void testSetTimeout() {
+		
+		rdq.clear();
+		
+		Message msg = new Message("x001", "Hello World");
+		msg.setPriority(3);
+		msg.setTimeout(20_000);
+		rdq.push(Arrays.asList(msg));
+		
+		List<Message> popped = rdq.pop(1, 1, TimeUnit.SECONDS);
+		assertTrue(popped.isEmpty());
+		
+		boolean updated = rdq.setTimeout(msg.getId(), 1);
+		assertTrue(updated);
+		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
+		assertEquals(1, popped.size());
+		assertEquals(1, popped.get(0).getTimeout());
+	}
+	
+	@Test
 	public void testAll() {
-
+		
 		rdq.clear();
 		
 		int count = 10;
@@ -315,7 +330,7 @@ public class RedisDynoQueueTest {
 
 	}
 
-	@After
+	@Before
 	public void clear(){
 		rdq.clear();
 		assertTrue(dynoClient.hlen(messageKey) == 0);

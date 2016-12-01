@@ -201,6 +201,7 @@ public class RedisDynoQueue implements DynoQueue {
 		}
 	}
 	
+	@SuppressWarnings("unchecked")
 	@Override
 	public List<Message> pop(int messageCount, int wait, TimeUnit unit) {
 
@@ -212,7 +213,7 @@ public class RedisDynoQueue implements DynoQueue {
 
 		try {
 
-			List<Message> messages = execute(() -> {
+			List<Message> messages = (List<Message>)execute(() -> {
 
 				Set<String> ids = new HashSet<>();
 				
@@ -365,6 +366,39 @@ public class RedisDynoQueue implements DynoQueue {
 		} finally {
 			sw.stop();
 		}
+	}
+	
+	@Override
+	public boolean setTimeout(String messageId, long timeout) {
+		
+		return execute(() -> {
+			
+			String json = nonQuorumConn.hget(messageStoreKey, messageId);
+			if(json == null) {
+				return false;
+			}
+			Message message = om.readValue(json, Message.class);
+			message.setTimeout(timeout);
+			
+			for (String shard : allShards) {
+				
+				String queueShard = getQueueShardKey(queueName, shard);
+				Double score = quorumConn.zscore(queueShard, messageId);
+				if(score != null) {
+					double priorityd = message.getPriority() / 100;
+					double newScore = Long.valueOf(System.currentTimeMillis() + timeout).doubleValue() + priorityd;
+					ZAddParams params = ZAddParams.zAddParams().xx();
+					long added = quorumConn.zadd(queueShard, newScore, messageId, params);
+					if(added == 1) {
+						json = om.writeValueAsString(message);
+						quorumConn.hset(messageStoreKey, message.getId(), json);
+						return true;
+					}
+					return false;
+				}
+			}
+			return false;
+		});
 	}
 
 	@Override
