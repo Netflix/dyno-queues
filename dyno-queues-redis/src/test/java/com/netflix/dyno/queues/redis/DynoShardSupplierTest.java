@@ -46,9 +46,9 @@ public class DynoShardSupplierTest {
 			@Override
 			public Collection<Host> getHosts() {
 				List<Host> hosts = new LinkedList<>();
-				hosts.add(new Host("host1", 8102, "us-east-1a", Status.Up));
-				hosts.add(new Host("host1", 8102, "us-east-1b", Status.Up));
-				hosts.add(new Host("host1", 8102, "us-east-1d", Status.Up));
+				hosts.add(new Host("host1", 8102, Status.Up).setRack("us-east-1a"));
+				hosts.add(new Host("host1", 8102, Status.Up).setRack("us-east-1b"));
+				hosts.add(new Host("host1", 8102, Status.Up).setRack("us-east-1d"));
 				
 				return hosts;
 			}
