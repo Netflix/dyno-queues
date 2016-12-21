@@ -18,6 +18,7 @@
  */
 package com.netflix.dyno.queues;
 
+import java.io.Closeable;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -26,7 +27,8 @@ import java.util.concurrent.TimeUnit;
  * @author Viren
  * Abstraction of a dyno queue.
  */
-public interface DynoQueue {
+public interface DynoQueue extends Closeable
+{
 	
 	/**
 	 * 
