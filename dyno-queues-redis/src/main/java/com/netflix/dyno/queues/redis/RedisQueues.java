@@ -31,8 +31,8 @@ import redis.clients.jedis.JedisCommands;
 /**
  * @author Viren
  *
- * Please note that you should take care for disposing resource related to {@class RedisQueue} insatance - that menas you
- * shouls call close() on  {@class RedisQueue} instance.
+ * Please note that you should take care for disposing resource related to RedisQueue insatance - that menas you
+ * should call close() on RedisQueue instance.
  */
 public class RedisQueues implements Closeable {
 
