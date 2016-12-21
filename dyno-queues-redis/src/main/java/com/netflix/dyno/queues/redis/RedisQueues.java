@@ -115,15 +115,12 @@ public class RedisQueues implements Closeable
 	}
 
 	@Override
-	public void close() throws IOException
-	{
+	public void close() throws IOException {
 		queues.values().forEach(queue -> {
-			try
-			{
+			try {
 				queue.close();
 			}
-			catch (final IOException e)
-			{
+			catch (final IOException e) {
 				throw new RuntimeException(e.getCause());
 			}
 		});

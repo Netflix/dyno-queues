@@ -624,8 +624,7 @@ public class RedisDynoQueue implements DynoQueue {
 	}
 
 	@Override
-	public void close() throws IOException
-	{
+	public void close() throws IOException {
 		schedulerForUnacksProcessing.shutdown();
 		schedulerForPrefetchProcessing.shutdown();
 		monitor.close();
