@@ -34,8 +34,7 @@ import redis.clients.jedis.JedisCommands;
  * Please note that you should take care for disposing resource related to {@class RedisQueue} insatance - that menas you
  * shouls call close() on  {@class RedisQueue} instance.
  */
-public class RedisQueues implements Closeable
-{
+public class RedisQueues implements Closeable {
 
 	private JedisCommands quorumConn;
 

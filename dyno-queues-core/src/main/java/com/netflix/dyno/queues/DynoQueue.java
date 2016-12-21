@@ -27,8 +27,7 @@ import java.util.concurrent.TimeUnit;
  * @author Viren
  * Abstraction of a dyno queue.
  */
-public interface DynoQueue extends Closeable
-{
+public interface DynoQueue extends Closeable {
 	
 	/**
 	 * 

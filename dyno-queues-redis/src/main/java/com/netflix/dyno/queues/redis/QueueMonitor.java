@@ -35,8 +35,7 @@ import com.netflix.servo.stats.StatsConfig;
  * @author Viren
  * Monitoring for the queue
  */
-public class QueueMonitor implements Closeable
-{
+public class QueueMonitor implements Closeable {
 
 	BasicTimer peek;
 
