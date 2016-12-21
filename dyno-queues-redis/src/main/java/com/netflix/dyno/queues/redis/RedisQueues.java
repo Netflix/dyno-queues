@@ -15,25 +15,29 @@
  */
 package com.netflix.dyno.queues.redis;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import redis.clients.jedis.JedisCommands;
-
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.ShardSupplier;
+
+import redis.clients.jedis.JedisCommands;
 
 /**
  * @author Viren
  *
+ * Please note that you should take care for disposing resource related to {@class RedisQueue} insatance - that menas you
+ * shouls call close() on  {@class RedisQueue} instance.
  */
-public class RedisQueues {
+public class RedisQueues implements Closeable {
 
 	private JedisCommands quorumConn;
-	
+
 	private JedisCommands nonQuorumConn;
 
 	private Set<String> allShards;
@@ -43,15 +47,15 @@ public class RedisQueues {
 	private String redisKeyPrefix;
 
 	private int unackTime;
-	
+
 	private int unackHandlerIntervalInMS;
-	
+
 	private ConcurrentHashMap<String, DynoQueue> queues;
 
 	private ExecutorService dynoCallExecutor;
-	
+
 	/**
-	 * 
+	 *
 	 * @param quorumConn Dyno connection with dc_quorum enabled
 	 * @param nonQuorumConn	Dyno connection to local Redis
 	 * @param redisKeyPrefix	prefix applied to the Redis keys
@@ -62,7 +66,7 @@ public class RedisQueues {
 	 */
 	public RedisQueues(JedisCommands quorumConn, JedisCommands nonQuorumConn, String redisKeyPrefix, ShardSupplier shardSupplier, int unackTime,
 			int unackHandlerIntervalInMS, int dynoOpThreadCount) {
-		
+
 		this.quorumConn = quorumConn;
 		this.nonQuorumConn = nonQuorumConn;
 		this.redisKeyPrefix = redisKeyPrefix;
@@ -75,20 +79,20 @@ public class RedisQueues {
 	}
 
 	/**
-	 * 
+	 *
 	 * @param queueName Name of the queue
 	 * @return Returns the DynoQueue hosting the given queue by name
 	 * @see DynoQueue
 	 * @see RedisDynoQueue
 	 */
 	public DynoQueue get(String queueName) {
-		
+
 		String key = queueName.intern();
 		DynoQueue queue = this.queues.get(key);
 		if (queue != null) {
 			return queue;
 		}
-		
+
 		synchronized (this) {
 			queue = new RedisDynoQueue(redisKeyPrefix, queueName, allShards, shardName, dynoCallExecutor)
 							.withUnackTime(unackTime)
@@ -100,13 +104,26 @@ public class RedisQueues {
 
 		return queue;
 	}
-	
+
 	/**
-	 * 
+	 *
 	 * @return Collection of all the registered queues
 	 */
 	public Collection<DynoQueue> queues(){
 		return this.queues.values();
 	}
-	
+
+	@Override
+	public void close() throws IOException {
+		queues.values().forEach(queue -> {
+			try {
+				queue.close();
+			}
+			catch (final IOException e) {
+				throw new RuntimeException(e.getCause());
+			}
+		});
+
+		dynoCallExecutor.shutdown();
+	}
 }
