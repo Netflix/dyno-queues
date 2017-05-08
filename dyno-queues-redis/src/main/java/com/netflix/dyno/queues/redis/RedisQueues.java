@@ -94,6 +94,10 @@ public class RedisQueues implements Closeable {
 		}
 
 		synchronized (this) {
+			queue = this.queues.get(key);
+			if (queue != null) {
+				return queue;
+			}
 			queue = new RedisDynoQueue(redisKeyPrefix, queueName, allShards, shardName, dynoCallExecutor)
 							.withUnackTime(unackTime)
 							.withUnackSchedulerTime(unackHandlerIntervalInMS)
