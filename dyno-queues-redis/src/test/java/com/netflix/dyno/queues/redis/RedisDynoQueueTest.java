@@ -204,7 +204,6 @@ public class RedisDynoQueueTest {
 		for(int p = 0; p < 3; p++) {
 			ses.scheduleWithFixedDelay(publisher, 1, 1, TimeUnit.MILLISECONDS);
 		}
-		
 		CountDownLatch latch = new CountDownLatch(count);
 		List<Message> allMsgs = new LinkedList<>();
 		Runnable consumer = new Runnable() {
@@ -220,7 +219,6 @@ public class RedisDynoQueueTest {
 		for(int c = 0; c < 3; c++) {
 			ses.scheduleWithFixedDelay(consumer, 1, 1, TimeUnit.MILLISECONDS);
 		}
-		
 		Uninterruptibles.awaitUninterruptibly(latch);
 		Set<Message> uniqueMessages = allMsgs.stream().collect(Collectors.toSet());
 

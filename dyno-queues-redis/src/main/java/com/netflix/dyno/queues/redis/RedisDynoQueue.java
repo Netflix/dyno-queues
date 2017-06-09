@@ -18,7 +18,6 @@ package com.netflix.dyno.queues.redis;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -118,7 +117,6 @@ public class RedisDynoQueue implements DynoQueue {
 		schedulerForPrefetchProcessing = Executors.newScheduledThreadPool(1);
 
 		schedulerForUnacksProcessing.scheduleAtFixedRate(() -> processUnacks(), unackScheduleInMS, unackScheduleInMS, TimeUnit.MILLISECONDS);
-		schedulerForPrefetchProcessing.scheduleAtFixedRate(() -> prefetchIds(), 0, 10, TimeUnit.MILLISECONDS);
 
 		logger.info(RedisDynoQueue.class.getName() + " is ready to serve " + queueName);
 
@@ -210,7 +208,6 @@ public class RedisDynoQueue implements DynoQueue {
 		}
 	}
 
-	@SuppressWarnings("unchecked")
 	@Override
 	public List<Message> pop(int messageCount, int wait, TimeUnit unit) {
 
@@ -219,31 +216,16 @@ public class RedisDynoQueue implements DynoQueue {
 		}
 
 		Stopwatch sw = monitor.start(monitor.pop, messageCount);
-
 		try {
 
-			List<Message> messages = (List<Message>)execute(() -> {
+			if (prefetchedIds.size() < messageCount) {
+				prefetch.addAndGet(messageCount - prefetchedIds.size());
+				prefetchIds();
+			}
+			return _pop(messageCount);
 
-				Set<String> ids = new HashSet<>();
-
-				if (prefetchedIds.size() < messageCount) {
-					prefetch.addAndGet(messageCount - prefetchedIds.size());
-					String id = prefetchedIds.poll(wait, unit);
-					if (id != null) {
-						ids.add(id);
-					}
-				}
-				prefetchedIds.drainTo(ids, messageCount);
-
-				if (ids.isEmpty()) {
-					return Collections.emptyList();
-				}
-				return _pop(ids, messageCount);
-
-			});
-
-			return messages;
-
+		} catch(Exception e) {
+			throw new RuntimeException(e);
 		} finally {
 			sw.stop();
 		}
@@ -275,15 +257,16 @@ public class RedisDynoQueue implements DynoQueue {
 
 	}
 
-	private List<Message> _pop(Set<String> ids, int messageCount) throws Exception {
+	private List<Message> _pop(int messageCount) throws Exception {
 
 		double unackScore = Long.valueOf(System.currentTimeMillis() + unackTime).doubleValue();
 		String unackQueueName = getUnackKey(queueName, shardName);
 
 		List<Message> popped = new LinkedList<>();
 		ZAddParams zParams = ZAddParams.zAddParams().nx();
+		List<String> ids = new LinkedList<>();
+		prefetchedIds.drainTo(ids, messageCount);
 		for (String msgId : ids) {
-
 			long added = quorumConn.zadd(unackQueueName, unackScore, msgId, zParams);
 			if(added == 0){
 				if (logger.isDebugEnabled()) {
@@ -310,7 +293,6 @@ public class RedisDynoQueue implements DynoQueue {
 				monitor.misses.increment();
 				continue;
 			}
-
 			Message msg = om.readValue(json, Message.class);
 			popped.add(msg);
 
