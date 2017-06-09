@@ -1,7 +1,12 @@
 buildscript {
 
+	repositories {
+        jcenter()
+    }
+    
     dependencies {
         classpath 'com.netflix.nebula:gradle-aggregate-javadocs-plugin:2.2.+'
+        classpath 'com.netflix.nebula:gradle-extra-configurations-plugin:3.0.3'
     }
 }
 plugins {
