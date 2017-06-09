@@ -20,8 +20,6 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.ShardSupplier;
@@ -52,8 +50,6 @@ public class RedisQueues implements Closeable {
 
 	private ConcurrentHashMap<String, DynoQueue> queues;
 
-	private ExecutorService dynoCallExecutor;
-
 	/**
 	 *
 	 * @param quorumConn Dyno connection with dc_quorum enabled
@@ -75,7 +71,6 @@ public class RedisQueues implements Closeable {
 		this.unackTime = unackTime;
 		this.unackHandlerIntervalInMS = unackHandlerIntervalInMS;
 		this.queues = new ConcurrentHashMap<>();
-		this.dynoCallExecutor = Executors.newFixedThreadPool(dynoOpThreadCount);
 	}
 
 	/**
@@ -94,7 +89,7 @@ public class RedisQueues implements Closeable {
 		}
 
 		synchronized (this) {
-			queue = new RedisDynoQueue(redisKeyPrefix, queueName, allShards, shardName, dynoCallExecutor)
+			queue = new RedisDynoQueue(redisKeyPrefix, queueName, allShards, shardName)
 							.withUnackTime(unackTime)
 							.withUnackSchedulerTime(unackHandlerIntervalInMS)
 							.withNonQuorumConn(nonQuorumConn)
@@ -123,7 +118,5 @@ public class RedisQueues implements Closeable {
 				throw new RuntimeException(e.getCause());
 			}
 		});
-
-		dynoCallExecutor.shutdown();
 	}
 }

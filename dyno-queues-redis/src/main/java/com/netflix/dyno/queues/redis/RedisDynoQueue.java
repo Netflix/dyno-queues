@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -78,8 +77,6 @@ public class RedisDynoQueue implements DynoQueue {
 
 	private ObjectMapper om;
 
-	private ExecutorService executorService;
-
 	private JedisCommands quorumConn;
 
 	private JedisCommands nonQuorumConn;
@@ -92,7 +89,7 @@ public class RedisDynoQueue implements DynoQueue {
 
 	private int retryCount = 2;
 
-	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, ExecutorService dynoCallExecutor){
+	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName){
 		this.redisKeyPrefix = redisKeyPrefix;
 		this.queueName = queueName;
 		this.allShards = allShards.stream().collect(Collectors.toList());
@@ -111,7 +108,6 @@ public class RedisDynoQueue implements DynoQueue {
 		this.om = om;
 		this.monitor = new QueueMonitor(queueName, shardName);
 		this.prefetchedIds = new LinkedBlockingQueue<>();
-		this.executorService = dynoCallExecutor;
 
 		schedulerForUnacksProcessing = Executors.newScheduledThreadPool(1);
 		schedulerForPrefetchProcessing = Executors.newScheduledThreadPool(1);
@@ -583,20 +579,20 @@ public class RedisDynoQueue implements DynoQueue {
 	}
 
 	private <R> R execute(Callable<R> r) {
-		return executeWithRetry(executorService, r, 0);
+		return executeWithRetry(r, 0);
 	}
 
-	private <R> R executeWithRetry(ExecutorService es, Callable<R> r, int retryCount) {
+	private <R> R executeWithRetry(Callable<R> r, int retryCount) {
 
 		try {
-
-			return es.submit(r).get(1, TimeUnit.MINUTES);
+			
+			return r.call();
 
 		} catch (ExecutionException e) {
 
 			if (e.getCause() instanceof DynoException) {
 				if (retryCount < this.retryCount) {
-					return executeWithRetry(es, r, ++retryCount);
+					return executeWithRetry(r, ++retryCount);
 				}
 			}
 			throw new RuntimeException(e.getCause());
