@@ -12,7 +12,6 @@ plugins {
 ext.githubProjectName = rootProject.name // Change if github project name is not the same as the root project's name
 
 apply plugin: 'project-report'
-apply plugin: 'nebula-aggregate-javadocs'
 
 subprojects {
 

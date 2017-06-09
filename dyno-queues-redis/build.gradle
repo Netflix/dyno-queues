@@ -1,6 +1,4 @@
-apply plugin: 'project-report'
-    
-dependencies {
+  dependencies {
     
     compile  project(':dyno-queues-core')
     
