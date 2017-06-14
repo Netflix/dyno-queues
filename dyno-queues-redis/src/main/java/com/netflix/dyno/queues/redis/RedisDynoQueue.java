@@ -23,9 +23,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -71,8 +71,6 @@ public class RedisDynoQueue implements DynoQueue {
 
 	private int unackTime = 60;
 
-	private int unackScheduleInMS = 60_000;
-
 	private QueueMonitor monitor;
 
 	private ObjectMapper om;
@@ -80,16 +78,19 @@ public class RedisDynoQueue implements DynoQueue {
 	private JedisCommands quorumConn;
 
 	private JedisCommands nonQuorumConn;
-
-	private LinkedBlockingQueue<String> prefetchedIds;
+	
+	private ConcurrentLinkedQueue<String> prefetchedIds;
 
 	private ScheduledExecutorService schedulerForUnacksProcessing;
 
 	private ScheduledExecutorService schedulerForPrefetchProcessing;
 
 	private int retryCount = 2;
-
-	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName){
+	
+	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName) {
+		this(redisKeyPrefix, queueName, allShards, shardName, 60_000);
+	}
+	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, int unackScheduleInMS) {
 		this.redisKeyPrefix = redisKeyPrefix;
 		this.queueName = queueName;
 		this.allShards = allShards.stream().collect(Collectors.toList());
@@ -107,7 +108,7 @@ public class RedisDynoQueue implements DynoQueue {
 
 		this.om = om;
 		this.monitor = new QueueMonitor(queueName, shardName);
-		this.prefetchedIds = new LinkedBlockingQueue<>();
+		this.prefetchedIds = new ConcurrentLinkedQueue<>();
 
 		schedulerForUnacksProcessing = Executors.newScheduledThreadPool(1);
 		schedulerForPrefetchProcessing = Executors.newScheduledThreadPool(1);
@@ -130,11 +131,6 @@ public class RedisDynoQueue implements DynoQueue {
 
 	public RedisDynoQueue withUnackTime(int unackTime){
 		this.unackTime = unackTime;
-		return this;
-	}
-
-	public RedisDynoQueue withUnackSchedulerTime(int unackScheduleInMS){
-		this.unackScheduleInMS = unackScheduleInMS;
 		return this;
 	}
 
@@ -213,11 +209,8 @@ public class RedisDynoQueue implements DynoQueue {
 
 		Stopwatch sw = monitor.start(monitor.pop, messageCount);
 		try {
-
-			if (prefetchedIds.size() < messageCount) {
-				prefetch.addAndGet(messageCount - prefetchedIds.size());
-				prefetchIds();
-			}
+			prefetch.addAndGet(messageCount);
+			prefetchIds();
 			return _pop(messageCount);
 
 		} catch(Exception e) {
@@ -260,9 +253,13 @@ public class RedisDynoQueue implements DynoQueue {
 
 		List<Message> popped = new LinkedList<>();
 		ZAddParams zParams = ZAddParams.zAddParams().nx();
-		List<String> ids = new LinkedList<>();
-		prefetchedIds.drainTo(ids, messageCount);
-		for (String msgId : ids) {
+		
+		for (;popped.size() != messageCount;) {
+			String msgId = prefetchedIds.poll();
+			if(msgId == null) {
+				break;
+			}
+			
 			long added = quorumConn.zadd(unackQueueName, unackScore, msgId, zParams);
 			if(added == 0){
 				if (logger.isDebugEnabled()) {
@@ -298,10 +295,7 @@ public class RedisDynoQueue implements DynoQueue {
 
 
 		}
-
 		return popped;
-
-
 	}
 
 	@Override
