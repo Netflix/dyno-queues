@@ -263,7 +263,7 @@ public class RedisDynoQueue implements DynoQueue {
 			long added = quorumConn.zadd(unackQueueName, unackScore, msgId, zParams);
 			if(added == 0){
 				if (logger.isDebugEnabled()) {
-					logger.debug("cannot add to the unack shard " + msgId);
+					logger.debug("cannot add {} to the unack shard ", queueName, msgId);
 				}
 				monitor.misses.increment();
 				continue;
@@ -272,7 +272,7 @@ public class RedisDynoQueue implements DynoQueue {
 			long removed = quorumConn.zrem(myQueueShard, msgId);
 			if (removed == 0) {
 				if (logger.isDebugEnabled()) {
-					logger.debug("cannot remove from the queue shard " + msgId);
+					logger.debug("cannot remove {} from the queue shard ", queueName, msgId);
 				}
 				monitor.misses.increment();
 				continue;
@@ -281,7 +281,7 @@ public class RedisDynoQueue implements DynoQueue {
 			String json = quorumConn.hget(messageStoreKey, msgId);
 			if(json == null){
 				if (logger.isDebugEnabled()) {
-					logger.debug("Cannot get the message payload " + msgId);
+					logger.debug("Cannot get the message payload for {}", msgId);
 				}
 				monitor.misses.increment();
 				continue;
@@ -289,11 +289,9 @@ public class RedisDynoQueue implements DynoQueue {
 			Message msg = om.readValue(json, Message.class);
 			popped.add(msg);
 
-			if(popped.size() == messageCount){
+			if (popped.size() == messageCount) {
 				return popped;
 			}
-
-
 		}
 		return popped;
 	}
