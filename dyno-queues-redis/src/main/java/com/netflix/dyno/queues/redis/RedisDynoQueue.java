@@ -215,7 +215,7 @@ public class RedisDynoQueue implements DynoQueue {
 			prefetch.addAndGet(messageCount);
 			prefetchIds();
 			while(prefetchedIds.size() < messageCount && ((System.currentTimeMillis() - start) < waitFor)) {				
-				Uninterruptibles.sleepUninterruptibly(10, TimeUnit.MILLISECONDS);
+				Uninterruptibles.sleepUninterruptibly(200, TimeUnit.MILLISECONDS);
 				prefetchIds();
 			}
 			return _pop(messageCount);
