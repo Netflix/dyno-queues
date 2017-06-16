@@ -216,7 +216,10 @@ public class RedisDynoQueueTest {
 
 			@Override
 			public void run() {
-				List<Message> popped = rdq.pop(100, 1, TimeUnit.SECONDS);
+				if(consumed.get() >= count) {
+					return;
+				}
+				List<Message> popped = rdq.pop(100, 1, TimeUnit.MILLISECONDS);
 				allMsgs.addAll(popped);
 				consumed.addAndGet(popped.size());			
 				popped.stream().forEach(p -> latch.countDown());
@@ -224,7 +227,7 @@ public class RedisDynoQueueTest {
 			}
 		};
 		
-		for(int c = 0; c < 3; c++) {
+		for(int c = 0; c < 2; c++) {
 			ses.scheduleWithFixedDelay(consumer, 1, 10, TimeUnit.MILLISECONDS);
 		}
 		Uninterruptibles.awaitUninterruptibly(latch);
@@ -233,7 +236,10 @@ public class RedisDynoQueueTest {
 
 		assertEquals(count, allMsgs.size());
 		assertEquals(count, uniqueMessages.size());
+		long start = System.currentTimeMillis();
 		List<Message> more = rdq.pop(1, 1, TimeUnit.SECONDS);
+		long elapsedTime = System.currentTimeMillis() - start;
+		assertTrue(elapsedTime > 1000);
 		assertEquals(0, more.size());
 		assertEquals(0, rdq.prefetch.get());
 		

@@ -39,6 +39,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.netflix.dyno.connectionpool.exception.DynoException;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
@@ -199,7 +200,7 @@ public class RedisDynoQueue implements DynoQueue {
 			sw.stop();
 		}
 	}
-
+	
 	@Override
 	public List<Message> pop(int messageCount, int wait, TimeUnit unit) {
 
@@ -209,8 +210,14 @@ public class RedisDynoQueue implements DynoQueue {
 
 		Stopwatch sw = monitor.start(monitor.pop, messageCount);
 		try {
+			long start = System.currentTimeMillis();
+			long waitFor = unit.toMillis(wait);
 			prefetch.addAndGet(messageCount);
 			prefetchIds();
+			while(prefetchedIds.size() < messageCount && ((System.currentTimeMillis() - start) < waitFor)) {				
+				Uninterruptibles.sleepUninterruptibly(10, TimeUnit.MILLISECONDS);
+				prefetchIds();
+			}
 			return _pop(messageCount);
 
 		} catch(Exception e) {
