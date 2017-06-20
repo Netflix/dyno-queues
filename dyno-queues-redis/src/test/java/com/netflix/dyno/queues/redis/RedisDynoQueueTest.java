@@ -95,7 +95,7 @@ public class RedisDynoQueueTest {
 		};
 		messageKey = redisKeyPrefix + ".MESSAGE." + queueName;
 		
-		rq = new RedisQueues(dynoClient, dynoClient, redisKeyPrefix, ss, 1_000, 1_000_000, 100);
+		rq = new RedisQueues(dynoClient, dynoClient, redisKeyPrefix, ss, 1_000, 1_000_000);
 		DynoQueue rdq1 = rq.get(queueName);
 		assertNotNull(rdq1);
 
