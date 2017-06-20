@@ -58,10 +58,9 @@ public class RedisQueues implements Closeable {
 	 * @param shardSupplier	Provider for the shards for the queues created
 	 * @param unackTime	Time in millisecond within which a message needs to be acknowledged by the client, after which the message is re-queued.
 	 * @param unackHandlerIntervalInMS	Time in millisecond at which the un-acknowledgement processor runs
-	 * @param dynoOpThreadCount no. of threads that are used to make the calls to dyno.   All the queues share the threadpool executor created with this count.
 	 */
 	public RedisQueues(JedisCommands quorumConn, JedisCommands nonQuorumConn, String redisKeyPrefix, ShardSupplier shardSupplier, int unackTime,
-			int unackHandlerIntervalInMS, int dynoOpThreadCount) {
+			int unackHandlerIntervalInMS) {
 
 		this.quorumConn = quorumConn;
 		this.nonQuorumConn = nonQuorumConn;
