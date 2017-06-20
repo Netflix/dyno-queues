@@ -1,11 +1,10 @@
-apply plugin: 'project-report'
-    
-dependencies {
+  dependencies {
     
     compile  project(':dyno-queues-core')
     
     compile "com.google.inject:guice:3.0"
-    compile "com.netflix.dyno:dyno-jedis:1.5.6"
+    compile 'com.netflix.dyno:dyno-core:1.5.8-rc.3'
+    compile "com.netflix.dyno:dyno-jedis:1.4.7"
     compile "com.netflix.archaius:archaius-core:0.5.6"
     compile "com.netflix.servo:servo-core:0.5.5"
     compile 'com.netflix.eureka:eureka-client:1.1.110'

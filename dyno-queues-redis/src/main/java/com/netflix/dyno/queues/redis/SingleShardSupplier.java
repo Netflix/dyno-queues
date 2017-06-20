@@ -19,44 +19,28 @@
 package com.netflix.dyno.queues.redis;
 
 import java.util.Set;
-import java.util.stream.Collectors;
 
-import com.netflix.dyno.connectionpool.HostSupplier;
+import com.google.common.collect.Sets;
 import com.netflix.dyno.queues.ShardSupplier;
 
 /**
  * @author Viren
  *
  */
-public class DynoShardSupplier implements ShardSupplier {
+public class SingleShardSupplier implements ShardSupplier {
 	
-	private HostSupplier hs;
+	private String shardName;
 	
-	private String region;
-	
-	private String localDC;
-	
-	/**
-	 * Dynomite based shard supplier.  Keeps the number of shards in parity with the hosts and regions
-	 * @param hs Host supplier
-	 * @param region current region
-	 * @param localDC local data center identifier
-	 */
-	public DynoShardSupplier(HostSupplier hs, String region, String localDC) {
-		this.hs = hs;
-		this.region = region;
-		this.localDC = localDC;
+	public SingleShardSupplier(String shardName){
+		this.shardName = shardName;
 	}
-	
 	@Override
 	public String getCurrentShard() {
-		return localDC;
+		return shardName;
 	}
 	
 	@Override
 	public Set<String> getQueueShards() {
-		return hs.getHosts().stream().map(host -> host.getRack()).map(rack -> rack.replaceAll(region, "")).collect(Collectors.toSet());
+		return Sets.newHashSet(shardName);
 	}
-	
-	
 }

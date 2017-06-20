@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -94,7 +95,7 @@ public class RedisDynoQueueTest {
 		};
 		messageKey = redisKeyPrefix + ".MESSAGE." + queueName;
 		
-		rq = new RedisQueues(dynoClient, dynoClient, redisKeyPrefix, ss, 1_000, 1_000_000, 100);
+		rq = new RedisQueues(dynoClient, dynoClient, redisKeyPrefix, ss, 1_000, 1_000_000);
 		DynoQueue rdq1 = rq.get(queueName);
 		assertNotNull(rdq1);
 
@@ -177,10 +178,11 @@ public class RedisDynoQueueTest {
 		
 		rdq.clear();
 		
-		final int count = 100;
+		final int count = 10_000;
 		final AtomicInteger published = new AtomicInteger(0);
 		
 		ScheduledExecutorService ses = Executors.newScheduledThreadPool(6);
+		CountDownLatch publishLatch = new CountDownLatch(1);
 		Runnable publisher = new Runnable() {
 
 			@Override
@@ -192,6 +194,7 @@ public class RedisDynoQueueTest {
 					messages.add(msg);
 				}
 				if(published.get() >= count) {
+					publishLatch.countDown();
 					return;
 				}
 				
@@ -204,29 +207,39 @@ public class RedisDynoQueueTest {
 		for(int p = 0; p < 3; p++) {
 			ses.scheduleWithFixedDelay(publisher, 1, 1, TimeUnit.MILLISECONDS);
 		}
-		
+		publishLatch.await();
 		CountDownLatch latch = new CountDownLatch(count);
-		List<Message> allMsgs = new LinkedList<>();
+		List<Message> allMsgs = new CopyOnWriteArrayList<>();
+		AtomicInteger consumed = new AtomicInteger(0);
+		AtomicInteger counter = new AtomicInteger(0);
 		Runnable consumer = new Runnable() {
 
 			@Override
 			public void run() {
-				List<Message> popped = rdq.pop(15, 1, TimeUnit.SECONDS);
+				if(consumed.get() >= count) {
+					return;
+				}
+				List<Message> popped = rdq.pop(100, 1, TimeUnit.MILLISECONDS);
 				allMsgs.addAll(popped);
+				consumed.addAndGet(popped.size());			
 				popped.stream().forEach(p -> latch.countDown());
+				counter.incrementAndGet();
 			}
 		};
 		
-		for(int c = 0; c < 3; c++) {
-			ses.scheduleWithFixedDelay(consumer, 1, 1, TimeUnit.MILLISECONDS);
+		for(int c = 0; c < 2; c++) {
+			ses.scheduleWithFixedDelay(consumer, 1, 10, TimeUnit.MILLISECONDS);
 		}
-		
 		Uninterruptibles.awaitUninterruptibly(latch);
+		System.out.println("Consumed: " + consumed.get() + ", all: " + allMsgs.size() + " counter: " + counter.get());
 		Set<Message> uniqueMessages = allMsgs.stream().collect(Collectors.toSet());
 
 		assertEquals(count, allMsgs.size());
 		assertEquals(count, uniqueMessages.size());
+		long start = System.currentTimeMillis();
 		List<Message> more = rdq.pop(1, 1, TimeUnit.SECONDS);
+		long elapsedTime = System.currentTimeMillis() - start;
+		assertTrue(elapsedTime > 1000);
 		assertEquals(0, more.size());
 		assertEquals(0, rdq.prefetch.get());
 		

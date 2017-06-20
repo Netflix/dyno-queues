@@ -15,6 +15,8 @@
  */
 package com.netflix.dyno.queues.redis;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -33,7 +35,7 @@ import com.netflix.servo.stats.StatsConfig;
  * @author Viren
  * Monitoring for the queue
  */
-public class QueueMonitor {
+public class QueueMonitor implements Closeable {
 
 	BasicTimer peek;
 
@@ -63,12 +65,14 @@ public class QueueMonitor {
 	
 	private String shardName;
 
+	private ScheduledExecutorService executor;
+
 	private static final String className = QueueMonitor.class.getSimpleName();
 	
 	QueueMonitor(String queueName, String shardName){
 		
 		String totalTagName = "total";
-		ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+		executor = Executors.newScheduledThreadPool(1);
 		
 		this.queueName = queueName;
 		this.shardName = shardName;
@@ -126,5 +130,9 @@ public class QueueMonitor {
 		sw.start();
 		return sw;
 	}
-	
+
+	@Override
+	public void close() throws IOException {
+		executor.shutdown();
+	}
 }
