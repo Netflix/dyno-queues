@@ -329,6 +329,13 @@ public class RedisDynoQueue implements DynoQueue {
 	}
 
 	@Override
+	public void ack(List<String> messageIds) {
+		for(String messageId : messageIds) {
+			ack(messageId);
+		}
+	}
+	
+	@Override
 	public boolean setUnackTimeout(String messageId, long timeout) {
 
 		Stopwatch sw = monitor.ack.start();
