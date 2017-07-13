@@ -47,7 +47,7 @@ public class RedisDynoQueue21 implements DynoQueue {
 		}
 		this.shards = shards;
 		this.unackTime = unackTime;
-		
+		this.name = queueName;
 		if(me == null) {
 			throw new IllegalArgumentException("List of shards supplied <" + shards + "> does not contain current shard name: " + currentShard);
 		}
