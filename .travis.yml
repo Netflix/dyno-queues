@@ -12,7 +12,10 @@ before_script:
     - $REDIS_BIN/redis-cli PING
     - export REDIS_VERSION="$(redis-cli INFO SERVER | sed -n 2p)"
     - echo $REDIS_VERSION
-    - redis-cli SHUTDOWN NOSAVE
+after_success:
+  - redis-cli SHUTDOWN NOSAVE
+after_failure:
+  - redis-cli SHUTDOWN NOSAVE
 script: "./buildViaTravis.sh"
 cache:
   directories:
