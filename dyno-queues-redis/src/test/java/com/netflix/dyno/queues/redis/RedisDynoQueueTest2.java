@@ -22,6 +22,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -170,10 +171,7 @@ public class RedisDynoQueueTest2 {
 				}
 				
 				published.addAndGet(messages.size());
-				System.out.println("Pushing....");
 				rdq.push(messages);
-				System.out.println("Pushed " + messages.size());
-				
 			}
 		};
 		
@@ -192,16 +190,13 @@ public class RedisDynoQueueTest2 {
 				if(consumed.get() >= count) {
 					return;
 				}
-				System.out.println("About to do a pop");
 				List<Message> popped = rdq.pop(100, 1, TimeUnit.MILLISECONDS);
-				System.out.println("Popped " + popped.size() + " messages.");
 				allMsgs.addAll(popped);
 				consumed.addAndGet(popped.size());			
 				popped.stream().forEach(p -> latch.countDown());
 				counter.incrementAndGet();
 			}
 		};
-		System.out.println("Here...");
 		for(int c = 0; c < 2; c++) {
 			ses.scheduleWithFixedDelay(consumer, 1, 10, TimeUnit.MILLISECONDS);
 		}
@@ -228,7 +223,7 @@ public class RedisDynoQueueTest2 {
 		
 		Message msg = new Message("x001yx", "Hello World");
 		msg.setPriority(3);
-		msg.setTimeout(20_000);
+		msg.setTimeout(10_000);
 		rdq.push(Arrays.asList(msg));
 		
 		List<Message> popped = rdq.pop(1, 1, TimeUnit.SECONDS);
@@ -245,6 +240,7 @@ public class RedisDynoQueueTest2 {
 	public void testAll() {
 		
 		rdq.clear();
+		assertEquals(0, rdq.size());
 		
 		int count = 10;
 		List<Message> messages = new LinkedList<>();
@@ -291,7 +287,7 @@ public class RedisDynoQueueTest2 {
 		
 		assertNotNull(messages3);
 		assertEquals(10, messages3.size());
-		assertEquals(messages, messages3);
+		assertEquals(messages.stream().map(msg -> msg.getId()).sorted().collect(Collectors.toList()), messages3.stream().map(msg -> msg.getId()).sorted().collect(Collectors.toList()));
 		assertEquals(10, messages3.stream().map(msg -> msg.getId()).collect(Collectors.toSet()).size());
 		messages3.stream().forEach(System.out::println);
 		assertTrue(dynoClient.hlen(messageKey) == 10);
@@ -304,19 +300,6 @@ public class RedisDynoQueueTest2 {
 		messages3 = rdq.pop(count, 1, TimeUnit.SECONDS);
 		assertNotNull(messages3);
 		assertEquals(0, messages3.size());
-		
-		int max = 10;
-		for (Message msg : messages) {
-			assertEquals(max, msg.getPriority());
-			rdq.remove(msg.getId());
-			max--;
-		}
-
-		size = rdq.size();
-		assertEquals(0, size);
-		
-		assertTrue(dynoClient.hlen(messageKey) == 0);
-
 	}
 
 	@Before

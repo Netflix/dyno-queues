@@ -506,8 +506,8 @@ public class RedisDynoQueue2 implements DynoQueue {
 
 			jedis.del(myQueueShard);
 			jedis.del(unackShardKey);
-		
 			jedis.del(messageStoreKey);
+			
 		} finally {
 			jedis.close();
 		}
