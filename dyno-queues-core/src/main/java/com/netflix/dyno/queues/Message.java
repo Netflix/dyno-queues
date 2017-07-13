@@ -34,6 +34,8 @@ public class Message {
 	
 	private int priority;
 
+	private String shard;
+	
 	public Message() {
 
 	}
@@ -112,6 +114,21 @@ public class Message {
 
 	public int getPriority() {
 		return priority;
+	}
+	
+	/**
+	 * @return the shard
+	 */
+	public String getShard() {
+		return shard;
+	}
+
+	/**
+	 * @param shard the shard to set
+	 * 
+	 */
+	public void setShard(String shard) {
+		this.shard = shard;
 	}
 
 	@Override

@@ -294,6 +294,7 @@ public class RedisDynoQueue2 implements DynoQueue {
 					continue;
 				}
 				Message msg = om.readValue(json, Message.class);
+				msg.setShard(shardName);
 				popped.add(msg);
 			}
 			return popped;
@@ -325,23 +326,23 @@ public class RedisDynoQueue2 implements DynoQueue {
 	}
 	
 	@Override
-	public void ack(List<String> messageIds) {
+	public void ack(List<Message> messages) {
 
 		Stopwatch sw = monitor.ack.start();
 		Jedis jedis = connPool.getResource();
 		Pipeline pipe = jedis.pipelined();
 		List<Response<Long>> responses = new LinkedList<>();
 		try {
-			for(String messageId : messageIds) {
-				responses.add(pipe.zrem(unackShardKey, messageId));
+			for(Message msg : messages) {
+				responses.add(pipe.zrem(unackShardKey, msg.getId()));
 			}
 			pipe.sync();
 			
 			List<Response<Long>> dels = new LinkedList<>();
-			for(int i = 0; i < messageIds.size(); i++) {
+			for(int i = 0; i < messages.size(); i++) {
 				Long removed = responses.get(i).get();
 				if (removed > 0) {
-					dels.add(pipe.hdel(messageStoreKey, messageIds.get(i)));	
+					dels.add(pipe.hdel(messageStoreKey, messages.get(i).getId()));	
 				}
 			}
 			pipe.sync();

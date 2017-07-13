@@ -329,9 +329,9 @@ public class RedisDynoQueue implements DynoQueue {
 	}
 
 	@Override
-	public void ack(List<String> messageIds) {
-		for(String messageId : messageIds) {
-			ack(messageId);
+	public void ack(List<Message> messages) {
+		for(Message message : messages) {
+			ack(message.getId());
 		}
 	}
 	
