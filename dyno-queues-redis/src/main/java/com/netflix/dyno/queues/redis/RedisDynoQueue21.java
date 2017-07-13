@@ -17,8 +17,6 @@ import com.google.common.collect.Lists;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
 
-import redis.clients.jedis.JedisPool;
-
 /**
  * @author Viren
  *
@@ -28,29 +26,19 @@ public class RedisDynoQueue21 implements DynoQueue {
 	private List<String> shards;
 
 	private String name;
-	
-	private int unackTime;
-	
+
 	private Map<String, RedisDynoQueue2> queues = new HashMap<>();
 	
 	private RedisDynoQueue2 me;
-	
-	public RedisDynoQueue21(String redisKeyPrefix, String queueName, List<String> shards, String currentShard, int unackScheduleInMS, int unackTime, JedisPool pool, JedisPool nonQuorumPool) {
-		for (String shard : shards) {
-			String shardQueueName = queueName + "." + shard;
-			RedisDynoQueue2 queue = new RedisDynoQueue2(redisKeyPrefix, shardQueueName, shard, unackScheduleInMS, unackTime, pool);
-			queue.setNonQuorumPool(nonQuorumPool);
-			if(shard.equals(currentShard)) {
-				this.me = queue;
-			}
-			queues.put(shard, queue);
-		}
-		this.shards = shards;
-		this.unackTime = unackTime;
+
+	public RedisDynoQueue21(String queueName, String shardName, Map<String, RedisDynoQueue2> queues) {
 		this.name = queueName;
+		this.queues = queues;
+		this.me = queues.get(shardName);
 		if(me == null) {
-			throw new IllegalArgumentException("List of shards supplied <" + shards + "> does not contain current shard name: " + currentShard);
+			throw new IllegalArgumentException("List of shards supplied (" + queues.keySet() + ") does not contain current shard name: " + shardName);
 		}
+		this.shards = queues.keySet().stream().collect(Collectors.toList());
 	}
 
 	@Override
@@ -60,7 +48,7 @@ public class RedisDynoQueue21 implements DynoQueue {
 
 	@Override
 	public int getUnackTime() {
-		return unackTime;
+		return me.getUnackTime();
 	}
 
 	@Override
