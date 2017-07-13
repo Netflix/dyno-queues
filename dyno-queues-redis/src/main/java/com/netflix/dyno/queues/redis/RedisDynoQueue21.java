@@ -35,10 +35,11 @@ public class RedisDynoQueue21 implements DynoQueue {
 	
 	private RedisDynoQueue2 me;
 	
-	public RedisDynoQueue21(String redisKeyPrefix, String queueName, List<String> shards, String currentShard, int unackScheduleInMS, int unackTime, JedisPool pool) {
+	public RedisDynoQueue21(String redisKeyPrefix, String queueName, List<String> shards, String currentShard, int unackScheduleInMS, int unackTime, JedisPool pool, JedisPool nonQuorumPool) {
 		for (String shard : shards) {
 			String shardQueueName = queueName + "." + shard;
 			RedisDynoQueue2 queue = new RedisDynoQueue2(redisKeyPrefix, shardQueueName, shard, unackScheduleInMS, unackTime, pool);
+			queue.setNonQuorumPool(nonQuorumPool);
 			if(shard.equals(currentShard)) {
 				this.me = queue;
 			}

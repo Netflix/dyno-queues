@@ -76,6 +76,8 @@ public class RedisDynoQueue2 implements DynoQueue {
 	private ObjectMapper om;
 
 	private JedisPool connPool;
+	
+	private JedisPool nonQuorumPool;
 
 	private LinkedBlockingQueue<String> prefetchedIds;
 
@@ -95,6 +97,7 @@ public class RedisDynoQueue2 implements DynoQueue {
 		this.unackShardKey = redisKeyPrefix + ".UNACK." + queueName + "." + shardName;
 		this.unackTime = unackTime;
 		this.connPool = pool;
+		this.nonQuorumPool = pool;
 		
 		ObjectMapper om = new ObjectMapper();
 		om.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -115,6 +118,14 @@ public class RedisDynoQueue2 implements DynoQueue {
 
 		logger.info(RedisDynoQueue2.class.getName() + " is ready to serve " + queueName);
 
+	}
+	
+	/**
+	 * 
+	 * @param nonQuorumPool When using a cluster like Dynomite, which relies on the quorum reads, supply a separate non-quorum read connection for ops like size etc.
+	 */
+	public void setNonQuorumPool(JedisPool nonQuorumPool) {
+		this.nonQuorumPool = nonQuorumPool;
 	}
 
 	@Override
@@ -466,7 +477,7 @@ public class RedisDynoQueue2 implements DynoQueue {
 	public long size() {
 
 		Stopwatch sw = monitor.size.start();
-		Jedis jedis = connPool.getResource();
+		Jedis jedis = nonQuorumPool.getResource();
 
 		try {
 			long size = jedis.zcard(myQueueShard);
@@ -482,7 +493,7 @@ public class RedisDynoQueue2 implements DynoQueue {
 
 		Stopwatch sw = monitor.size.start();
 		Map<String, Map<String, Long>> shardSizes = new HashMap<>();
-		Jedis jedis = connPool.getResource();
+		Jedis jedis = nonQuorumPool.getResource();
 		try {
 
 			long size = jedis.zcard(myQueueShard);
