@@ -71,7 +71,7 @@ public class RedisQueues implements Closeable {
 		this.unackHandlerIntervalInMS = unackHandlerIntervalInMS;
 		this.queues = new ConcurrentHashMap<>();
 	}
-
+	
 	/**
 	 *
 	 * @param queueName Name of the queue

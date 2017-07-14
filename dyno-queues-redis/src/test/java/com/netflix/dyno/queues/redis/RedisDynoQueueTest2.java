@@ -22,7 +22,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -58,7 +57,7 @@ public class RedisDynoQueueTest2 {
 
 	private static final String redisKeyPrefix = "testdynoqueues";
 
-	private static RedisDynoQueue2 rdq;
+	private static RedisQueue rdq;
 	
 	private static String messageKey;
 	
@@ -75,7 +74,7 @@ public class RedisDynoQueueTest2 {
 		JedisPool pool = new JedisPool(config, "localhost", 6379);
 		dynoClient = new Jedis("localhost", 6379, 0, 0);
 		dynoClient.flushAll();
-		rdq = new RedisDynoQueue2(redisKeyPrefix, queueName, "x", 1_000, pool);
+		rdq = new RedisQueue(redisKeyPrefix, queueName, "x", 1_000, pool);
 		messageKey = redisKeyPrefix + ".MESSAGE." + queueName;
 	}
 

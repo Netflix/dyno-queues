@@ -21,7 +21,7 @@ import redis.clients.jedis.JedisPoolConfig;
  */
 public class BenchmarkTests {
 
-	private RedisDynoQueue2 queue;
+	private RedisQueue queue;
 	
 	public BenchmarkTests() {
 		JedisPoolConfig config = new JedisPoolConfig();
@@ -31,7 +31,7 @@ public class BenchmarkTests {
 		config.setMaxIdle(5);
 		config.setMaxWaitMillis(60_000);
 		JedisPool pool = new JedisPool(config, "localhost", 6379);
-		queue = new RedisDynoQueue2("perf", "TEST_QUEUE", "x", 60000_000, pool);
+		queue = new RedisQueue("perf", "TEST_QUEUE", "x", 60000_000, pool);
 		
 	}
 	
@@ -86,7 +86,7 @@ public class BenchmarkTests {
 	public static void main(String[] args) throws Exception {
 		try {
 			new BenchmarkTests().publish();			
-			ExecutorService es = Executors.newFixedThreadPool(3);
+			ExecutorService es = Executors.newFixedThreadPool(1);
 			es.submit(()->{
 				BenchmarkTests tests = new BenchmarkTests();
 				tests.consume();

@@ -23,8 +23,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -55,9 +55,9 @@ import redis.clients.jedis.params.sortedset.ZAddParams;
  * @author Viren
  *
  */
-public class RedisDynoQueue2 implements DynoQueue {
+public class RedisQueue implements DynoQueue {
 
-	private final Logger logger = LoggerFactory.getLogger(RedisDynoQueue2.class);
+	private final Logger logger = LoggerFactory.getLogger(RedisQueue.class);
 
 	private String queueName;
 
@@ -79,17 +79,17 @@ public class RedisDynoQueue2 implements DynoQueue {
 	
 	private JedisPool nonQuorumPool;
 
-	private LinkedBlockingQueue<String> prefetchedIds;
+	private ConcurrentLinkedQueue<String> prefetchedIds;
 
 	private ScheduledExecutorService schedulerForUnacksProcessing;
 
 	private ScheduledExecutorService schedulerForPrefetchProcessing;
 
-	public RedisDynoQueue2(String redisKeyPrefix, String queueName, String shardName, int unackTime, JedisPool pool) {
+	public RedisQueue(String redisKeyPrefix, String queueName, String shardName, int unackTime, JedisPool pool) {
 		this(redisKeyPrefix, queueName, shardName, unackTime, unackTime, pool);
 	}
 
-	public RedisDynoQueue2(String redisKeyPrefix, String queueName, String shardName, int unackScheduleInMS, int unackTime, JedisPool pool) {
+	public RedisQueue(String redisKeyPrefix, String queueName, String shardName, int unackScheduleInMS, int unackTime, JedisPool pool) {
 		this.queueName = queueName;
 		this.shardName = shardName;
 		this.messageStoreKey = redisKeyPrefix + ".MESSAGE." + queueName;
@@ -109,14 +109,14 @@ public class RedisDynoQueue2 implements DynoQueue {
 
 		this.om = om;
 		this.monitor = new QueueMonitor(queueName, shardName);
-		this.prefetchedIds = new LinkedBlockingQueue<>();
+		this.prefetchedIds = new ConcurrentLinkedQueue<>();
 
 		schedulerForUnacksProcessing = Executors.newScheduledThreadPool(1);
 		schedulerForPrefetchProcessing = Executors.newScheduledThreadPool(1);
 
 		schedulerForUnacksProcessing.scheduleAtFixedRate(() -> processUnacks(), unackScheduleInMS, unackScheduleInMS, TimeUnit.MILLISECONDS);
 
-		logger.info(RedisDynoQueue2.class.getName() + " is ready to serve " + queueName);
+		logger.info(RedisQueue.class.getName() + " is ready to serve " + queueName);
 
 	}
 	
@@ -258,21 +258,23 @@ public class RedisDynoQueue2 implements DynoQueue {
 		List<Message> popped = new LinkedList<>();
 		ZAddParams zParams = ZAddParams.zAddParams().nx();
 
-		List<String> batch = new LinkedList<>();
-		int count = prefetchedIds.drainTo(batch, messageCount);
-		if (count == 0) {
-			return popped;
-		}
-
 		Jedis jedis = connPool.getResource();
 		try {
+			
+			List<String> batch = new LinkedList<>();			
 			Pipeline pipe = jedis.pipelined();
-			List<Response<Long>> responses = new ArrayList<>(count);
-			for (int i = 0; i < count; i++) {
-				String msgId = batch.get(i);
+			List<Response<Long>> responses = new ArrayList<>(messageCount);
+			for (int i = 0; i < messageCount; i++) {
+				//String msgId = batch.get(i);
+				String msgId = prefetchedIds.poll();
+				if(msgId == null) {
+					break;
+				}
+				batch.add(msgId);
 				responses.add(pipe.zadd(unackShardKey, unackScore, msgId, zParams));
 			}
 			pipe.sync();
+			int count = batch.size();
 
 			List<Response<Long>> zremRes = new ArrayList<>(count);
 			List<String> zremIds = new ArrayList<>(count);
