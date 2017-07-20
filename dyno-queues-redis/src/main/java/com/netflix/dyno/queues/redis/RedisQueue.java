@@ -23,8 +23,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -79,7 +79,7 @@ public class RedisQueue implements DynoQueue {
 	
 	private JedisPool nonQuorumPool;
 
-	private ConcurrentLinkedQueue<String> prefetchedIds;
+	private LinkedBlockingQueue<String> prefetchedIds;
 
 	private ScheduledExecutorService schedulerForUnacksProcessing;
 
@@ -109,7 +109,7 @@ public class RedisQueue implements DynoQueue {
 
 		this.om = om;
 		this.monitor = new QueueMonitor(queueName, shardName);
-		this.prefetchedIds = new ConcurrentLinkedQueue<>();
+		this.prefetchedIds = new LinkedBlockingQueue<>();
 
 		schedulerForUnacksProcessing = Executors.newScheduledThreadPool(1);
 		schedulerForPrefetchProcessing = Executors.newScheduledThreadPool(1);
@@ -261,26 +261,28 @@ public class RedisQueue implements DynoQueue {
 		Jedis jedis = connPool.getResource();
 		try {
 			
-			List<String> batch = new LinkedList<>();			
+			List<String> batch = new LinkedList<>();
+			prefetchedIds.drainTo(batch, messageCount);
 			Pipeline pipe = jedis.pipelined();
-			List<Response<Long>> responses = new ArrayList<>(messageCount);
-			for (int i = 0; i < messageCount; i++) {
-				//String msgId = batch.get(i);
-				String msgId = prefetchedIds.poll();
+			List<Response<Long>> zadds = new ArrayList<>(batch.size());
+			for (int i = 0; i < batch.size(); i++) {
+				String msgId = batch.get(i);
 				if(msgId == null) {
 					break;
 				}
-				batch.add(msgId);
-				responses.add(pipe.zadd(unackShardKey, unackScore, msgId, zParams));
+				zadds.add(pipe.zadd(unackShardKey, unackScore, msgId, zParams));
 			}
 			pipe.sync();
-			int count = batch.size();
-
+			
+			int count = zadds.size();
 			List<Response<Long>> zremRes = new ArrayList<>(count);
 			List<String> zremIds = new ArrayList<>(count);
 			for (int i = 0; i < count; i++) {
-				long added = responses.get(i).get();
+				long added = zadds.get(i).get();
 				if (added == 0) {
+					if(logger.isDebugEnabled()) {
+						logger.debug("Cannot add {} to unack queue shard", batch.get(i));
+					}
 					monitor.misses.increment();
 					continue;
 				}
@@ -293,6 +295,9 @@ public class RedisQueue implements DynoQueue {
 			for (int i = 0; i < zremRes.size(); i++) {
 				long removed = zremRes.get(i).get();
 				if (removed == 0) {
+					if(logger.isDebugEnabled()) {
+						logger.debug("Cannot remove {} from queue shard", zremIds.get(i));
+					}
 					monitor.misses.increment();
 					continue;
 				}
@@ -303,6 +308,9 @@ public class RedisQueue implements DynoQueue {
 			for (int i = 0; i < getRes.size(); i++) {
 				String json = getRes.get(i).get();
 				if (json == null) {
+					if(logger.isDebugEnabled()) {
+						logger.debug("Cannot read payload for {}", zremIds.get(i));
+					}
 					monitor.misses.increment();
 					continue;
 				}
