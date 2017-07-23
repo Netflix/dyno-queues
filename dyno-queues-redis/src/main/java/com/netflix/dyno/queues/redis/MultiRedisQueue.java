@@ -323,14 +323,14 @@ public class MultiRedisQueue implements DynoQueue {
 			config.setMaxTotal(redisPoolSize);
 			config.setMaxIdle(5);
 			config.setMaxWaitMillis(60_000);
-			
+
 			
 			Map<String, RedisQueue> queues = new HashMap<>();
 			for(String queueShard : shardMap.keySet()) {
 				String host = shardMap.get(queueShard).getIpAddress();
 				
-				JedisPool pool = new JedisPool(config, host, quorumPort);
-				JedisPool readPool = new JedisPool(config, host, nonQuorumPort);
+				JedisPool pool = new JedisPool(config, host, quorumPort, 0);
+				JedisPool readPool = new JedisPool(config, host, nonQuorumPort, 0);
 				
 				RedisQueue q = new RedisQueue(redisKeyPrefix, queueName, queueShard, unackTime, pool);
 				q.setNonQuorumPool(readPool);
