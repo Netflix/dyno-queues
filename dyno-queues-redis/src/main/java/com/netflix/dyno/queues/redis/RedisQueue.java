@@ -155,11 +155,11 @@ public class RedisQueue implements DynoQueue {
 				pipe.zadd(myQueueShard, score, message.getId());
 			}
 			pipe.sync();
-
+			pipe.close();
+			
 			return messages.stream().map(msg -> msg.getId()).collect(Collectors.toList());
 
 		} catch (Exception e) {
-			e.printStackTrace();
 			throw new RuntimeException(e);
 		} finally {
 			conn.close();
@@ -273,6 +273,7 @@ public class RedisQueue implements DynoQueue {
 				zadds.add(pipe.zadd(unackShardKey, unackScore, msgId, zParams));
 			}
 			pipe.sync();
+			pipe.close();
 			
 			pipe = jedis.pipelined();
 			int count = zadds.size();
@@ -291,6 +292,7 @@ public class RedisQueue implements DynoQueue {
 				zremRes.add(pipe.zrem(myQueueShard, batch.get(i)));
 			}
 			pipe.sync();
+			pipe.close();
 
 			pipe = jedis.pipelined();
 			List<Response<String>> getRes = new ArrayList<>(count);
@@ -298,7 +300,8 @@ public class RedisQueue implements DynoQueue {
 				long removed = zremRes.get(i).get();
 				if (removed == 0) {
 					if(logger.isDebugEnabled()) {
-						logger.debug("Cannot remove {} from queue shard", zremIds.get(i));
+						Double score = jedis.zscore(myQueueShard, zremIds.get(i));
+						logger.debug("Cannot remove {} from queue shard, score in queue? {}", zremIds.get(i), score);						
 					}
 					monitor.misses.increment();
 					continue;
@@ -306,6 +309,7 @@ public class RedisQueue implements DynoQueue {
 				getRes.add(pipe.hget(messageStoreKey, zremIds.get(i)));
 			}
 			pipe.sync();
+			pipe.close();
 
 			for (int i = 0; i < getRes.size(); i++) {
 				String json = getRes.get(i).get();
@@ -360,6 +364,7 @@ public class RedisQueue implements DynoQueue {
 				responses.add(pipe.zrem(unackShardKey, msg.getId()));
 			}
 			pipe.sync();
+			pipe.close();
 			
 			List<Response<Long>> dels = new LinkedList<>();
 			for(int i = 0; i < messages.size(); i++) {
@@ -369,7 +374,10 @@ public class RedisQueue implements DynoQueue {
 				}
 			}
 			pipe.sync();
-
+			pipe.close();
+			
+		} catch (IOException e) {
+			throw new RuntimeException(e);
 		} finally {
 			jedis.close();
 			sw.stop();
