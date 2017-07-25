@@ -274,6 +274,7 @@ public class RedisQueue implements DynoQueue {
 			}
 			pipe.sync();
 			
+			pipe = jedis.pipelined();
 			int count = zadds.size();
 			List<Response<Long>> zremRes = new ArrayList<>(count);
 			List<String> zremIds = new ArrayList<>(count);
@@ -291,6 +292,7 @@ public class RedisQueue implements DynoQueue {
 			}
 			pipe.sync();
 
+			pipe = jedis.pipelined();
 			List<Response<String>> getRes = new ArrayList<>(count);
 			for (int i = 0; i < zremRes.size(); i++) {
 				long removed = zremRes.get(i).get();
