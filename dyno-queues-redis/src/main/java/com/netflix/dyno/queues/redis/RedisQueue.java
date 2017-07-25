@@ -261,7 +261,7 @@ public class RedisQueue implements DynoQueue {
 		Jedis jedis = connPool.getResource();
 		try {
 			
-			List<String> batch = new LinkedList<>();
+			List<String> batch = new ArrayList<>(messageCount);
 			prefetchedIds.drainTo(batch, messageCount);
 			Pipeline pipe = jedis.pipelined();
 			List<Response<Long>> zadds = new ArrayList<>(batch.size());
