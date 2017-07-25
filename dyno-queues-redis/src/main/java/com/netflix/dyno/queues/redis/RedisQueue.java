@@ -289,8 +289,9 @@ public class RedisQueue implements DynoQueue {
 					monitor.misses.increment();
 					continue;
 				}
-				zremIds.add(batch.get(i));
-				zremRes.add(pipe.zrem(myQueueShard, batch.get(i)));
+				String id = batch.get(i);
+				zremIds.add(id);
+				zremRes.add(pipe.zrem(myQueueShard, id));
 			}
 			pipe.sync();
 			pipe.close();
@@ -300,12 +301,14 @@ public class RedisQueue implements DynoQueue {
 			for (int i = 0; i < zremRes.size(); i++) {
 				long removed = zremRes.get(i).get();
 				if (removed == 0) {
-					if(logger.isDebugEnabled()) {						
-						Double score = jedis2.zscore(myQueueShard, zremIds.get(i));
-						logger.debug("Cannot remove {} from queue shard, score in queue? {}", zremIds.get(i), score);
+					Double score = jedis2.zscore(myQueueShard, zremIds.get(i));
+					if(score != null) {
+						if(logger.isDebugEnabled()) {												
+							logger.debug("Cannot remove {} from queue shard, score in queue? {}", zremIds.get(i), score);
+						}
+						monitor.misses.increment();
+						continue;
 					}
-					monitor.misses.increment();
-					continue;
 				}
 				getRes.add(pipe.hget(messageStoreKey, zremIds.get(i)));
 			}
@@ -613,4 +616,5 @@ public class RedisQueue implements DynoQueue {
 		schedulerForPrefetchProcessing.shutdown();
 		monitor.close();
 	}
+	
 }
