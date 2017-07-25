@@ -300,11 +300,9 @@ public class RedisQueue implements DynoQueue {
 			for (int i = 0; i < zremRes.size(); i++) {
 				long removed = zremRes.get(i).get();
 				if (removed == 0) {
-					if(logger.isDebugEnabled()) {
-						
+					if(logger.isDebugEnabled()) {						
 						Double score = jedis2.zscore(myQueueShard, zremIds.get(i));
 						logger.debug("Cannot remove {} from queue shard, score in queue? {}", zremIds.get(i), score);
-						
 					}
 					monitor.misses.increment();
 					continue;
@@ -567,33 +565,40 @@ public class RedisQueue implements DynoQueue {
 
 		try {
 
-			long queueDepth = size();
-			monitor.queueDepth.record(queueDepth);
-
-			int batchSize = 1_000;
-
-			double now = Long.valueOf(System.currentTimeMillis()).doubleValue();
-
-			Set<Tuple> unacks = jedis.zrangeByScoreWithScores(unackShardKey, 0, now, 0, batchSize);
-
-			if (unacks.size() > 0) {
-				logger.debug("Adding " + unacks.size() + " messages back to the queue for " + queueName);
-			}
-
-			for (Tuple unack : unacks) {
-
-				double score = unack.getScore();
-				String member = unack.getElement();
-
-				String payload = jedis.hget(messageStoreKey, member);
-				if (payload == null) {
-					jedis.zrem(unackShardKey, member);
-					continue;
+			do {
+				
+				long queueDepth = size();
+				monitor.queueDepth.record(queueDepth);
+	
+				int batchSize = 1_000;
+	
+				double now = Long.valueOf(System.currentTimeMillis()).doubleValue();
+	
+				Set<Tuple> unacks = jedis.zrangeByScoreWithScores(unackShardKey, 0, now, 0, batchSize);
+	
+				if (unacks.size() > 0) {
+					logger.debug("Adding " + unacks.size() + " messages back to the queue for " + queueName);
+				} else {
+					//Nothing more to be processed
+					return;
 				}
-
-				jedis.zadd(myQueueShard, score, member);
-				jedis.zrem(unackShardKey, member);
-			}
+	
+				for (Tuple unack : unacks) {
+	
+					double score = unack.getScore();
+					String member = unack.getElement();
+	
+					String payload = jedis.hget(messageStoreKey, member);
+					if (payload == null) {
+						jedis.zrem(unackShardKey, member);
+						continue;
+					}
+	
+					jedis.zadd(myQueueShard, score, member);
+					jedis.zrem(unackShardKey, member);
+				}
+				
+			} while (true);
 
 		} finally {
 			jedis.close();
