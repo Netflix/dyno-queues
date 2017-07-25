@@ -24,10 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -37,8 +35,6 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.Uninterruptibles;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
 import com.netflix.servo.monitor.Stopwatch;
@@ -79,8 +75,6 @@ public class RedisQueue implements DynoQueue {
 	
 	private JedisPool nonQuorumPool;
 
-	private LinkedBlockingQueue<String> prefetchedIds;
-
 	private ScheduledExecutorService schedulerForUnacksProcessing;
 
 	private ScheduledExecutorService schedulerForPrefetchProcessing;
@@ -109,7 +103,6 @@ public class RedisQueue implements DynoQueue {
 
 		this.om = om;
 		this.monitor = new QueueMonitor(queueName, shardName);
-		this.prefetchedIds = new LinkedBlockingQueue<>();
 
 		schedulerForUnacksProcessing = Executors.newScheduledThreadPool(1);
 		schedulerForPrefetchProcessing = Executors.newScheduledThreadPool(1);
@@ -197,7 +190,7 @@ public class RedisQueue implements DynoQueue {
 	}
 
 	@Override
-	public List<Message> pop(int messageCount, int wait, TimeUnit unit) {
+	public synchronized List<Message> pop(int messageCount, int wait, TimeUnit unit) {
 
 		if (messageCount < 1) {
 			return Collections.emptyList();
@@ -206,16 +199,9 @@ public class RedisQueue implements DynoQueue {
 		Stopwatch sw = monitor.start(monitor.pop, messageCount);
 
 		try {
-			long start = System.currentTimeMillis();
-			long waitFor = unit.toMillis(wait);
-			prefetch.addAndGet(messageCount);
-			prefetchIds();
-			while (prefetchedIds.size() < messageCount && ((System.currentTimeMillis() - start) < waitFor)) {
-				Uninterruptibles.sleepUninterruptibly(200, TimeUnit.MILLISECONDS);
-				prefetchIds();
-			}
-
-			List<Message> popped = _pop(messageCount);
+			
+			List<String> peeked = peekIds(0, messageCount).stream().collect(Collectors.toList());
+			List<Message> popped = _pop(peeked);
 			return popped;
 
 		} catch (Exception e) {
@@ -226,32 +212,7 @@ public class RedisQueue implements DynoQueue {
 
 	}
 
-	@VisibleForTesting
-	AtomicInteger prefetch = new AtomicInteger(0);
-
-	private void prefetchIds() {
-
-		if (prefetch.get() < 1) {
-			return;
-		}
-
-		int prefetchCount = prefetch.get();
-		Stopwatch sw = monitor.start(monitor.prefetch, prefetchCount);
-		try {
-
-			Set<String> ids = peekIds(0, prefetchCount);
-			prefetchedIds.addAll(ids);
-			prefetch.addAndGet((-1 * ids.size()));
-			if (prefetch.get() < 0 || ids.isEmpty()) {
-				prefetch.set(0);
-			}
-		} finally {
-			sw.stop();
-		}
-
-	}
-
-	private List<Message> _pop(int messageCount) throws Exception {
+	private List<Message> _pop(List<String> batch) throws Exception {
 
 		double unackScore = Long.valueOf(System.currentTimeMillis() + unackTime).doubleValue();
 
@@ -262,8 +223,6 @@ public class RedisQueue implements DynoQueue {
 		Jedis jedis2 = connPool.getResource();
 		try {
 			
-			List<String> batch = new ArrayList<>(messageCount);
-			prefetchedIds.drainTo(batch, messageCount);
 			Pipeline pipe = jedis.pipelined();
 			List<Response<Long>> zadds = new ArrayList<>(batch.size());
 			for (int i = 0; i < batch.size(); i++) {
@@ -274,12 +233,10 @@ public class RedisQueue implements DynoQueue {
 				zadds.add(pipe.zadd(unackShardKey, unackScore, msgId, zParams));
 			}
 			pipe.sync();
-			pipe.close();
 			
-			pipe = jedis.pipelined();
 			int count = zadds.size();
-			List<Response<Long>> zremRes = new ArrayList<>(count);
 			List<String> zremIds = new ArrayList<>(count);
+			List<Response<Long>> zremRes = new LinkedList<>(); 
 			for (int i = 0; i < count; i++) {
 				long added = zadds.get(i).get();
 				if (added == 0) {
@@ -294,9 +251,7 @@ public class RedisQueue implements DynoQueue {
 				zremRes.add(pipe.zrem(myQueueShard, id));
 			}
 			pipe.sync();
-			pipe.close();
 
-			pipe = jedis.pipelined();
 			List<Response<String>> getRes = new ArrayList<>(count);
 			for (int i = 0; i < zremRes.size(); i++) {
 				long removed = zremRes.get(i).get();
@@ -313,7 +268,6 @@ public class RedisQueue implements DynoQueue {
 				getRes.add(pipe.hget(messageStoreKey, zremIds.get(i)));
 			}
 			pipe.sync();
-			pipe.close();
 
 			for (int i = 0; i < getRes.size(); i++) {
 				String json = getRes.get(i).get();
@@ -616,5 +570,4 @@ public class RedisQueue implements DynoQueue {
 		schedulerForPrefetchProcessing.shutdown();
 		monitor.close();
 	}
-	
 }

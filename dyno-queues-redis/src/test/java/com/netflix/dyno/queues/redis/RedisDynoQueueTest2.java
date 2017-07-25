@@ -211,7 +211,6 @@ public class RedisDynoQueueTest2 {
 		long elapsedTime = System.currentTimeMillis() - start;
 		assertTrue(elapsedTime > 1000);
 		assertEquals(0, more.size());
-		assertEquals(0, rdq.prefetch.get());
 		
 		ses.shutdownNow();
 	}

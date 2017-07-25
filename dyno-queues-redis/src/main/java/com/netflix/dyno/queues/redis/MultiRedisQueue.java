@@ -213,10 +213,11 @@ public class MultiRedisQueue implements DynoQueue {
 		
 		private int redisPoolSize;
 		
-		int quorumPort;
+		private int quorumPort;
 		
-		int nonQuorumPort;	
+		private int nonQuorumPort;	
 		
+		private List<Host> hosts;
 		
 		/**
 		 * @param queueName the queueName to set
@@ -307,10 +308,16 @@ public class MultiRedisQueue implements DynoQueue {
 			this.nonQuorumPort = nonQuorumPort;
 			return this;
 		}
+		
+		public Builder setHosts(List<Host> hosts) {
+			this.hosts = hosts;
+			return this;
+		}
 
 		public MultiRedisQueue build() {
-
-			List<Host> hosts = getHostsFromEureka(ec, dynomiteClusterName);
+			if(hosts == null) {
+				hosts = getHostsFromEureka(ec, dynomiteClusterName);
+			}
 			Map<String, Host> shardMap = new HashMap<>();
 			for(Host host : hosts) {
 				String shard = hostToShardMap.apply(host);

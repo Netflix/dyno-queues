@@ -6,8 +6,6 @@ package com.netflix.dyno.queues.redis;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import com.netflix.dyno.queues.Message;
@@ -63,6 +61,7 @@ public class BenchmarkTests {
 			int count = 0;
 			for(int i = 0; i < loopCount; i++) {
 				List<Message> popped = queue.pop(batchSize, 1, TimeUnit.MILLISECONDS);
+				queue.ack(popped);
 				count += popped.size();
 			}
 			long e = System.currentTimeMillis();
@@ -85,21 +84,14 @@ public class BenchmarkTests {
 	
 	public static void main(String[] args) throws Exception {
 		try {
-			new BenchmarkTests().publish();			
-			ExecutorService es = Executors.newFixedThreadPool(1);
-			es.submit(()->{
-				BenchmarkTests tests = new BenchmarkTests();
+			
+			BenchmarkTests tests = new BenchmarkTests();
+			
+			for(int i = 0; i < 20; i++) {
+				tests.publish();
 				tests.consume();
-			});
-			es.submit(()->{
-				BenchmarkTests tests = new BenchmarkTests();
-				tests.consume();
-			});
-			es.submit(()->{
-				BenchmarkTests tests = new BenchmarkTests();
-				tests.consume();
-			});
-			es.awaitTermination(1, TimeUnit.MINUTES);
+			}
+			
 		} finally {
 			System.exit(0);
 		}
