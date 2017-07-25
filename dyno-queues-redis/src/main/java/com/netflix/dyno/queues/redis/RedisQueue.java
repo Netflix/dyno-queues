@@ -259,6 +259,7 @@ public class RedisQueue implements DynoQueue {
 		ZAddParams zParams = ZAddParams.zAddParams().nx();
 
 		Jedis jedis = connPool.getResource();
+		Jedis jedis2 = connPool.getResource();
 		try {
 			
 			List<String> batch = new ArrayList<>(messageCount);
@@ -300,8 +301,10 @@ public class RedisQueue implements DynoQueue {
 				long removed = zremRes.get(i).get();
 				if (removed == 0) {
 					if(logger.isDebugEnabled()) {
-						Double score = jedis.zscore(myQueueShard, zremIds.get(i));
-						logger.debug("Cannot remove {} from queue shard, score in queue? {}", zremIds.get(i), score);						
+						
+						Double score = jedis2.zscore(myQueueShard, zremIds.get(i));
+						logger.debug("Cannot remove {} from queue shard, score in queue? {}", zremIds.get(i), score);
+						
 					}
 					monitor.misses.increment();
 					continue;
@@ -327,6 +330,7 @@ public class RedisQueue implements DynoQueue {
 			return popped;
 		} finally {
 			jedis.close();
+			jedis2.close();
 		}
 	}
 
