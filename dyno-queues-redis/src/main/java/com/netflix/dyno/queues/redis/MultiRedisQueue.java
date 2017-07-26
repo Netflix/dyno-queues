@@ -66,11 +66,20 @@ public class MultiRedisQueue implements DynoQueue {
 
 	@Override
 	public List<String> push(List<Message> messages) {
-		List<List<Message>> p = Lists.partition(messages, shards.size());
+		int size = queues.size();
+		int partitionSize = messages.size()/size;
 		List<String> ids = new LinkedList<>();
-		for(List<Message> pm : p) {
-			ids.addAll(queues.get(getNextShard()).push(pm));
+		
+		for(int i = 0; i < size-1; i++) {
+			RedisQueue queue = queues.get(getNextShard());
+			int start = i * partitionSize;
+			int end = start + partitionSize;
+			ids.addAll(queue.push(messages.subList(start, end)));
 		}
+		RedisQueue queue = queues.get(getNextShard());
+		int start = (size-1) * partitionSize;
+		
+		ids.addAll(queue.push(messages.subList(start, messages.size())));
 		return ids;
 	}
 
@@ -381,7 +390,6 @@ public class MultiRedisQueue implements DynoQueue {
 			return hosts;
 		}
 	}
-	
 	
 	
 }
