@@ -189,6 +189,11 @@ public class RedisQueue implements DynoQueue {
 		}
 	}
 
+	
+	//
+	//Note: This implementation does NOT support long polling.  The method itself is synchronized, so implementing long poll could potentially block other threads.
+	//When required, the long polling should be implemented on the caller side (ie the broker implementation using the recipe)
+	//
 	@Override
 	public synchronized List<Message> pop(int messageCount, int wait, TimeUnit unit) {
 
@@ -220,7 +225,6 @@ public class RedisQueue implements DynoQueue {
 		ZAddParams zParams = ZAddParams.zAddParams().nx();
 
 		Jedis jedis = connPool.getResource();
-		Jedis jedis2 = connPool.getResource();
 		try {
 			
 			Pipeline pipe = jedis.pipelined();
@@ -256,14 +260,11 @@ public class RedisQueue implements DynoQueue {
 			for (int i = 0; i < zremRes.size(); i++) {
 				long removed = zremRes.get(i).get();
 				if (removed == 0) {
-					Double score = jedis2.zscore(myQueueShard, zremIds.get(i));
-					if(score != null) {
-						if(logger.isDebugEnabled()) {												
-							logger.debug("Cannot remove {} from queue shard, score in queue? {}", zremIds.get(i), score);
-						}
-						monitor.misses.increment();
-						continue;
+					if(logger.isDebugEnabled()) {												
+						logger.debug("Cannot remove {} from queue shard", zremIds.get(i));
 					}
+					monitor.misses.increment();
+					continue;
 				}
 				getRes.add(pipe.hget(messageStoreKey, zremIds.get(i)));
 			}
@@ -285,7 +286,6 @@ public class RedisQueue implements DynoQueue {
 			return popped;
 		} finally {
 			jedis.close();
-			jedis2.close();
 		}
 	}
 

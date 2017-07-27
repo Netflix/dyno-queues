@@ -39,7 +39,6 @@ import java.util.stream.Collectors;
 
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.util.concurrent.Uninterruptibles;
@@ -206,17 +205,13 @@ public class RedisDynoQueueTest2 {
 
 		assertEquals(count, allMsgs.size());
 		assertEquals(count, uniqueMessages.size());
-		long start = System.currentTimeMillis();
 		List<Message> more = rdq.pop(1, 1, TimeUnit.SECONDS);
-		long elapsedTime = System.currentTimeMillis() - start;
-		//assertTrue("elapsedTime: " + elapsedTime, elapsedTime > 1000);
 		assertEquals(0, more.size());
 		
 		ses.shutdownNow();
 	}
 	
 	@Test
-	@Ignore	//Breaks frequently on travis - need to dig further to find out
 	public void testSetTimeout() {
 		
 		rdq.clear();
