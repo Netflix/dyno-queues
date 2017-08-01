@@ -58,7 +58,9 @@ public class RedisDynoQueueTest2 {
 
 	private static RedisQueue rdq;
 	
-	private static String messageKey;
+	private static String messageKeyPrefix;
+	
+	private static int maxHashBuckets = 1024;
 	
 	@BeforeClass
 	public static void setUpBeforeClass() throws Exception {
@@ -74,7 +76,7 @@ public class RedisDynoQueueTest2 {
 		dynoClient = new Jedis("localhost", 6379, 0, 0);
 		dynoClient.flushAll();
 		rdq = new RedisQueue(redisKeyPrefix, queueName, "x", 1_000, pool);
-		messageKey = redisKeyPrefix + ".MESSAGE." + queueName;
+		messageKeyPrefix = redisKeyPrefix + ".MESSAGE.";
 	}
 
 	@Test
@@ -224,11 +226,11 @@ public class RedisDynoQueueTest2 {
 		List<Message> popped = rdq.pop(1, 1, TimeUnit.SECONDS);
 		assertTrue(popped.isEmpty());
 		
-		boolean updated = rdq.setTimeout(msg.getId(), 1);
+		boolean updated = rdq.setTimeout(msg.getId(), 0);
 		assertTrue(updated);
-		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
+		popped = rdq.pop(2, 1, TimeUnit.SECONDS);
 		assertEquals(1, popped.size());
-		assertEquals(1, popped.get(0).getTimeout());
+		assertEquals(0, popped.get(0).getTimeout());
 	}
 	
 	@Test
@@ -285,7 +287,11 @@ public class RedisDynoQueueTest2 {
 		assertEquals(messages.stream().map(msg -> msg.getId()).sorted().collect(Collectors.toList()), messages3.stream().map(msg -> msg.getId()).sorted().collect(Collectors.toList()));
 		assertEquals(10, messages3.stream().map(msg -> msg.getId()).collect(Collectors.toSet()).size());
 		messages3.stream().forEach(System.out::println);
-		assertTrue(dynoClient.hlen(messageKey) == 10);
+		int bucketCounts = 0;
+		for(int i = 0; i < maxHashBuckets; i++) {
+			bucketCounts += dynoClient.hlen(messageKeyPrefix + i + "." + queueName);
+		}
+		assertEquals(10, bucketCounts);
 		
 		for (Message msg : messages3) {
 			assertTrue(rdq.ack(msg.getId()));
@@ -300,7 +306,11 @@ public class RedisDynoQueueTest2 {
 	@Before
 	public void clear(){
 		rdq.clear();
-		assertTrue(dynoClient.hlen(messageKey) == 0);
+		int bucketCounts = 0;
+		for(int i = 0; i < maxHashBuckets; i++) {
+			bucketCounts += dynoClient.hlen(messageKeyPrefix + i + "." + queueName);
+		}
+		assertEquals(0, bucketCounts);
 	}
 	
 	@Test

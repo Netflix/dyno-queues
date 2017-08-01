@@ -35,6 +35,8 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.netflix.dyno.connectionpool.HashPartitioner;
+import com.netflix.dyno.connectionpool.impl.hash.Murmur3HashPartitioner;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
 import com.netflix.servo.monitor.Stopwatch;
@@ -59,11 +61,11 @@ public class RedisQueue implements DynoQueue {
 
 	private String shardName;
 
-	private String messageStoreKey;
+	private String messageStoreKeyPrefix;
 
 	private String myQueueShard;
 	
-	private String unackShardKey;
+	private String unackShardKeyPrefix;
 
 	private int unackTime = 60;
 
@@ -78,6 +80,10 @@ public class RedisQueue implements DynoQueue {
 	private ScheduledExecutorService schedulerForUnacksProcessing;
 
 	private ScheduledExecutorService schedulerForPrefetchProcessing;
+	
+	private HashPartitioner partitioner = new Murmur3HashPartitioner();
+	
+	private int maxHashBuckets = 1024;
 
 	public RedisQueue(String redisKeyPrefix, String queueName, String shardName, int unackTime, JedisPool pool) {
 		this(redisKeyPrefix, queueName, shardName, unackTime, unackTime, pool);
@@ -86,9 +92,9 @@ public class RedisQueue implements DynoQueue {
 	public RedisQueue(String redisKeyPrefix, String queueName, String shardName, int unackScheduleInMS, int unackTime, JedisPool pool) {
 		this.queueName = queueName;
 		this.shardName = shardName;
-		this.messageStoreKey = redisKeyPrefix + ".MESSAGE." + queueName;
+		this.messageStoreKeyPrefix = redisKeyPrefix + ".MESSAGE.";
 		this.myQueueShard = redisKeyPrefix + ".QUEUE." + queueName + "." + shardName;
-		this.unackShardKey = redisKeyPrefix + ".UNACK." + queueName + "." + shardName;
+		this.unackShardKeyPrefix = redisKeyPrefix + ".UNACK." + queueName + "." + shardName + ".";
 		this.unackTime = unackTime;
 		this.connPool = pool;
 		this.nonQuorumPool = pool;
@@ -142,7 +148,7 @@ public class RedisQueue implements DynoQueue {
 
 			for (Message message : messages) {
 				String json = om.writeValueAsString(message);
-				pipe.hset(messageStoreKey, message.getId(), json);
+				pipe.hset(messageStoreKey(message.getId()), message.getId(), json);
 				double priority = message.getPriority() / 100.0;
 				double score = Long.valueOf(System.currentTimeMillis() + message.getTimeout()).doubleValue() + priority;
 				pipe.zadd(myQueueShard, score, message.getId());
@@ -158,6 +164,18 @@ public class RedisQueue implements DynoQueue {
 			conn.close();
 			sw.stop();
 		}
+	}
+	
+	private String messageStoreKey(String msgId) {
+		Long hash = partitioner.hash(msgId);
+		long bucket = hash % maxHashBuckets;
+		return messageStoreKeyPrefix + bucket + "." + queueName; 
+	}
+	
+	private String unackShardKey(String messageId) {
+		Long hash = partitioner.hash(messageId);
+		long bucket = hash % maxHashBuckets;
+		return unackShardKeyPrefix + bucket;		
 	}
 
 	@Override
@@ -175,7 +193,7 @@ public class RedisQueue implements DynoQueue {
 
 			List<Message> messages = new LinkedList<Message>();
 			for (String id : ids) {
-				String json = jedis.hget(messageStoreKey, id);
+				String json = jedis.hget(messageStoreKey(id), id);
 				Message message = om.readValue(json, Message.class);
 				messages.add(message);
 			}
@@ -234,7 +252,7 @@ public class RedisQueue implements DynoQueue {
 				if(msgId == null) {
 					break;
 				}
-				zadds.add(pipe.zadd(unackShardKey, unackScore, msgId, zParams));
+				zadds.add(pipe.zadd(unackShardKey(msgId), unackScore, msgId, zParams));
 			}
 			pipe.sync();
 			
@@ -266,7 +284,7 @@ public class RedisQueue implements DynoQueue {
 					monitor.misses.increment();
 					continue;
 				}
-				getRes.add(pipe.hget(messageStoreKey, zremIds.get(i)));
+				getRes.add(pipe.hget(messageStoreKey(zremIds.get(i)), zremIds.get(i)));
 			}
 			pipe.sync();
 
@@ -297,9 +315,9 @@ public class RedisQueue implements DynoQueue {
 
 		try {
 
-			Long removed = jedis.zrem(unackShardKey, messageId);
+			Long removed = jedis.zrem(unackShardKey(messageId), messageId);
 			if (removed > 0) {
-				jedis.hdel(messageStoreKey, messageId);
+				jedis.hdel(messageStoreKey(messageId), messageId);
 				return true;
 			}
 		
@@ -320,7 +338,7 @@ public class RedisQueue implements DynoQueue {
 		List<Response<Long>> responses = new LinkedList<>();
 		try {
 			for(Message msg : messages) {
-				responses.add(pipe.zrem(unackShardKey, msg.getId()));
+				responses.add(pipe.zrem(unackShardKey(msg.getId()), msg.getId()));
 			}
 			pipe.sync();
 			pipe.close();
@@ -329,7 +347,7 @@ public class RedisQueue implements DynoQueue {
 			for(int i = 0; i < messages.size(); i++) {
 				Long removed = responses.get(i).get();
 				if (removed > 0) {
-					dels.add(pipe.hdel(messageStoreKey, messages.get(i).getId()));	
+					dels.add(pipe.hdel(messageStoreKey(messages.get(i).getId()), messages.get(i).getId()));	
 				}
 			}
 			pipe.sync();
@@ -354,9 +372,9 @@ public class RedisQueue implements DynoQueue {
 		try {
 
 			double unackScore = Long.valueOf(System.currentTimeMillis() + timeout).doubleValue();
-			Double score = jedis.zscore(unackShardKey, messageId);
+			Double score = jedis.zscore(unackShardKey(messageId), messageId);
 			if (score != null) {
-				jedis.zadd(unackShardKey, unackScore, messageId);
+				jedis.zadd(unackShardKey(messageId), unackScore, messageId);
 				return true;
 			}
 		
@@ -374,7 +392,7 @@ public class RedisQueue implements DynoQueue {
 		Jedis jedis = connPool.getResource();
 
 		try {
-			String json = jedis.hget(messageStoreKey, messageId);
+			String json = jedis.hget(messageStoreKey(messageId), messageId);
 			if (json == null) {
 				return false;
 			}
@@ -387,7 +405,7 @@ public class RedisQueue implements DynoQueue {
 				double newScore = Long.valueOf(System.currentTimeMillis() + timeout).doubleValue() + priorityd;
 				jedis.zadd(myQueueShard, newScore, messageId);
 				json = om.writeValueAsString(message);
-				jedis.hset(messageStoreKey, message.getId(), json);
+				jedis.hset(messageStoreKey(message.getId()), message.getId(), json);
 				return true;
 			
 			}
@@ -409,10 +427,10 @@ public class RedisQueue implements DynoQueue {
 
 		try {
 
-			jedis.zrem(unackShardKey, messageId);
+			jedis.zrem(unackShardKey(messageId), messageId);
 
 			Long removed = jedis.zrem(myQueueShard, messageId);
-			Long msgRemoved = jedis.hdel(messageStoreKey, messageId);
+			Long msgRemoved = jedis.hdel(messageStoreKey(messageId), messageId);
 
 			if (removed > 0 && msgRemoved > 0) {
 				return true;
@@ -433,7 +451,7 @@ public class RedisQueue implements DynoQueue {
 		Jedis jedis = connPool.getResource();
 		try {
 
-			String json = jedis.hget(messageStoreKey, messageId);
+			String json = jedis.hget(messageStoreKey(messageId), messageId);
 			if (json == null) {
 				if (logger.isDebugEnabled()) {
 					logger.debug("Cannot get the message payload " + messageId);
@@ -476,7 +494,12 @@ public class RedisQueue implements DynoQueue {
 		try {
 
 			long size = jedis.zcard(myQueueShard);
-			long uacked = jedis.zcard(unackShardKey);
+			long uacked = 0;
+			for(int i = 0; i < maxHashBuckets; i++) {
+				String unackShardKey = unackShardKeyPrefix + i;
+				uacked += jedis.zcard(unackShardKey);
+			}
+			
 			Map<String, Long> shardDetails = new HashMap<>();
 			shardDetails.put("size", size);
 			shardDetails.put("uacked", uacked);
@@ -496,8 +519,15 @@ public class RedisQueue implements DynoQueue {
 		try {
 
 			jedis.del(myQueueShard);
-			jedis.del(unackShardKey);
-			jedis.del(messageStoreKey);
+
+			for(int i = 0; i < maxHashBuckets; i++) {
+				String unackShardKey = unackShardKeyPrefix + i;
+				jedis.del(unackShardKey);
+				
+				String  messageStoreKey = messageStoreKeyPrefix + i + "." + queueName;
+				jedis.del(messageStoreKey);
+				
+			}
 			
 		} finally {
 			jedis.close();
@@ -516,6 +546,13 @@ public class RedisQueue implements DynoQueue {
 	}
 
 	public void processUnacks() {
+		for(int i = 0; i < maxHashBuckets; i++) {
+			String unackShardKey = unackShardKeyPrefix + i;
+			processUnacks(unackShardKey);
+		}
+	}
+	
+	private void processUnacks(String unackShardKey) {
 
 		Stopwatch sw = monitor.processUnack.start();
 		Jedis jedis = connPool.getResource();
@@ -545,14 +582,14 @@ public class RedisQueue implements DynoQueue {
 					double score = unack.getScore();
 					String member = unack.getElement();
 	
-					String payload = jedis.hget(messageStoreKey, member);
+					String payload = jedis.hget(messageStoreKey(member), member);
 					if (payload == null) {
-						jedis.zrem(unackShardKey, member);
+						jedis.zrem(unackShardKey(member), member);
 						continue;
 					}
 	
 					jedis.zadd(myQueueShard, score, member);
-					jedis.zrem(unackShardKey, member);
+					jedis.zrem(unackShardKey(member), member);
 				}
 				
 			} while (true);
@@ -570,4 +607,6 @@ public class RedisQueue implements DynoQueue {
 		schedulerForPrefetchProcessing.shutdown();
 		monitor.close();
 	}
+	
+	
 }
