@@ -264,6 +264,8 @@ public class RedisDynoQueueTest {
 		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
 		assertEquals(1, popped.size());
 		assertEquals(1, popped.get(0).getTimeout());
+		updated = rdq.setTimeout(msg.getId(), 1);
+		assertTrue(!updated);
 	}
 	
 	@Test

@@ -381,13 +381,10 @@ public class RedisDynoQueue implements DynoQueue {
 					double priorityd = message.getPriority() / 100;
 					double newScore = Long.valueOf(System.currentTimeMillis() + timeout).doubleValue() + priorityd;
 					ZAddParams params = ZAddParams.zAddParams().xx();
-					long added = quorumConn.zadd(queueShard, newScore, messageId, params);
-					if(added == 1) {
-						json = om.writeValueAsString(message);
-						quorumConn.hset(messageStoreKey, message.getId(), json);
-						return true;
-					}
-					return false;
+					quorumConn.zadd(queueShard, newScore, messageId, params);
+					json = om.writeValueAsString(message);
+					quorumConn.hset(messageStoreKey, message.getId(), json);
+					return true;
 				}
 			}
 			return false;
