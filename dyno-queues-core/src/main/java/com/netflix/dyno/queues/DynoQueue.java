@@ -77,6 +77,13 @@ public interface DynoQueue extends Closeable {
 	 */
 	public boolean ack(String messageId);
 	
+	
+	/**
+	 * Bulk version for {@link #ack(String)}
+	 * @param messages Messages to be acknowledged.  Each message MUST be populated with id and shard information.
+	 */
+	public void ack(List<Message> messages);
+	
 	/**
 	 * Sets the unack timeout on the message (changes the default timeout to the new value).  Useful when extended lease is required for a message by consumer before sending ack.
 	 * @param messageId ID of the message to be acknowledged

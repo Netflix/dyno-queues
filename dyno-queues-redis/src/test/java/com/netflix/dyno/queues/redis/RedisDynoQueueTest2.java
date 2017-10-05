@@ -22,7 +22,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -43,67 +42,41 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.util.concurrent.Uninterruptibles;
-import com.netflix.dyno.connectionpool.Host;
-import com.netflix.dyno.connectionpool.Host.Status;
-import com.netflix.dyno.connectionpool.HostSupplier;
-import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
-import com.netflix.dyno.queues.ShardSupplier;
-import com.netflix.dyno.queues.jedis.JedisMock;
 
-public class RedisDynoQueueTest {
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.JedisPoolConfig;
 
-	private static JedisMock dynoClient;
+public class RedisDynoQueueTest2 {
+
+	private static Jedis dynoClient;
 
 	private static final String queueName = "test_queue";
 
 	private static final String redisKeyPrefix = "testdynoqueues";
 
-	private static RedisDynoQueue rdq;
-
-	private static RedisQueues rq;
+	private static RedisQueue rdq;
 	
-	private static String messageKey;
-
+	private static String messageKeyPrefix;
+	
+	private static int maxHashBuckets = 1024;
+	
 	@BeforeClass
 	public static void setUpBeforeClass() throws Exception {
-
-		HostSupplier hs = new HostSupplier() {
-			@Override
-			public Collection<Host> getHosts() {
-				List<Host> hosts = new LinkedList<>();
-				hosts.add(new Host("ec2-11-22-33-444.compute-0.amazonaws.com", 8102, "us-east-1d", Status.Up));
-				return hosts;
-			}
-		};
 		
-		dynoClient = new JedisMock();
 		
-		Set<String> allShards = hs.getHosts().stream().map(host -> host.getRack().substring(host.getRack().length() - 2)).collect(Collectors.toSet());
-		String shardName = allShards.iterator().next();
-		ShardSupplier ss = new ShardSupplier() {
-
-			@Override
-			public Set<String> getQueueShards() {
-				return allShards;
-			}
-
-			@Override
-			public String getCurrentShard() {
-				return shardName;
-			}
-		};
-		messageKey = redisKeyPrefix + ".MESSAGE." + queueName;
-		
-		rq = new RedisQueues(dynoClient, dynoClient, redisKeyPrefix, ss, 1_000, 1_000_000);
-		DynoQueue rdq1 = rq.get(queueName);
-		assertNotNull(rdq1);
-
-		rdq = (RedisDynoQueue)rq.get(queueName);
-		assertNotNull(rdq);
-
-		assertEquals(rdq1, rdq); // should be the same instance.		
-		
+		JedisPoolConfig config = new JedisPoolConfig();
+		config.setTestOnBorrow(true);
+		config.setTestOnCreate(true);
+		config.setMaxTotal(10);
+		config.setMaxIdle(5);
+		config.setMaxWaitMillis(60_000);
+		JedisPool pool = new JedisPool(config, "localhost", 6379);
+		dynoClient = new Jedis("localhost", 6379, 0, 0);
+		dynoClient.flushAll();
+		rdq = new RedisQueue(redisKeyPrefix, queueName, "x", 1_000, pool);
+		messageKeyPrefix = redisKeyPrefix + ".MESSAGE.";
 	}
 
 	@Test
@@ -164,7 +137,7 @@ public class RedisDynoQueueTest {
 		
 		rdq.ack(id);
 		Map<String, Map<String, Long>> size = rdq.shardSizes();
-		Map<String, Long> values = size.get("1d");
+		Map<String, Long> values = size.get("x");
 		long total = values.values().stream().mapToLong(v -> v).sum();
 		assertEquals(0, total);
 		
@@ -178,7 +151,7 @@ public class RedisDynoQueueTest {
 		
 		rdq.clear();
 		
-		final int count = 10_000;
+		final int count = 100;
 		final AtomicInteger published = new AtomicInteger(0);
 		
 		ScheduledExecutorService ses = Executors.newScheduledThreadPool(6);
@@ -200,7 +173,6 @@ public class RedisDynoQueueTest {
 				
 				published.addAndGet(messages.size());
 				rdq.push(messages);
-				
 			}
 		};
 		
@@ -226,7 +198,6 @@ public class RedisDynoQueueTest {
 				counter.incrementAndGet();
 			}
 		};
-		
 		for(int c = 0; c < 2; c++) {
 			ses.scheduleWithFixedDelay(consumer, 1, 10, TimeUnit.MILLISECONDS);
 		}
@@ -236,12 +207,8 @@ public class RedisDynoQueueTest {
 
 		assertEquals(count, allMsgs.size());
 		assertEquals(count, uniqueMessages.size());
-		long start = System.currentTimeMillis();
 		List<Message> more = rdq.pop(1, 1, TimeUnit.SECONDS);
-		long elapsedTime = System.currentTimeMillis() - start;
-		assertTrue(elapsedTime > 1000);
 		assertEquals(0, more.size());
-		assertEquals(0, rdq.prefetch.get());
 		
 		ses.shutdownNow();
 	}
@@ -251,27 +218,26 @@ public class RedisDynoQueueTest {
 		
 		rdq.clear();
 		
-		Message msg = new Message("x001", "Hello World");
+		Message msg = new Message("x001yx", "Hello World");
 		msg.setPriority(3);
-		msg.setTimeout(20_000);
+		msg.setTimeout(10_000);
 		rdq.push(Arrays.asList(msg));
 		
 		List<Message> popped = rdq.pop(1, 1, TimeUnit.SECONDS);
 		assertTrue(popped.isEmpty());
 		
-		boolean updated = rdq.setTimeout(msg.getId(), 1);
+		boolean updated = rdq.setTimeout(msg.getId(), 0);
 		assertTrue(updated);
-		popped = rdq.pop(1, 1, TimeUnit.SECONDS);
+		popped = rdq.pop(2, 1, TimeUnit.SECONDS);
 		assertEquals(1, popped.size());
-		assertEquals(1, popped.get(0).getTimeout());
-		updated = rdq.setTimeout(msg.getId(), 1);
-		assertTrue(!updated);
+		assertEquals(0, popped.get(0).getTimeout());
 	}
 	
 	@Test
 	public void testAll() {
 		
 		rdq.clear();
+		assertEquals(0, rdq.size());
 		
 		int count = 10;
 		List<Message> messages = new LinkedList<>();
@@ -300,7 +266,7 @@ public class RedisDynoQueueTest {
 		assertEquals(messages, poped);
 
 		Uninterruptibles.sleepUninterruptibly(2, TimeUnit.SECONDS);
-		((RedisDynoQueue)rdq).processUnacks();
+		rdq.processUnacks();
 		
 		for (Message msg : messages) {
 			Message found = rdq.get(msg.getId());
@@ -318,10 +284,14 @@ public class RedisDynoQueueTest {
 		
 		assertNotNull(messages3);
 		assertEquals(10, messages3.size());
-		assertEquals(messages, messages3);
+		assertEquals(messages.stream().map(msg -> msg.getId()).sorted().collect(Collectors.toList()), messages3.stream().map(msg -> msg.getId()).sorted().collect(Collectors.toList()));
 		assertEquals(10, messages3.stream().map(msg -> msg.getId()).collect(Collectors.toSet()).size());
 		messages3.stream().forEach(System.out::println);
-		assertTrue(dynoClient.hlen(messageKey) == 10);
+		int bucketCounts = 0;
+		for(int i = 0; i < maxHashBuckets; i++) {
+			bucketCounts += dynoClient.hlen(messageKeyPrefix + i + "." + queueName);
+		}
+		assertEquals(10, bucketCounts);
 		
 		for (Message msg : messages3) {
 			assertTrue(rdq.ack(msg.getId()));
@@ -331,25 +301,16 @@ public class RedisDynoQueueTest {
 		messages3 = rdq.pop(count, 1, TimeUnit.SECONDS);
 		assertNotNull(messages3);
 		assertEquals(0, messages3.size());
-		
-		int max = 10;
-		for (Message msg : messages) {
-			assertEquals(max, msg.getPriority());
-			rdq.remove(msg.getId());
-			max--;
-		}
-
-		size = rdq.size();
-		assertEquals(0, size);
-		
-		assertTrue(dynoClient.hlen(messageKey) == 0);
-
 	}
 
 	@Before
 	public void clear(){
 		rdq.clear();
-		assertTrue(dynoClient.hlen(messageKey) == 0);
+		int bucketCounts = 0;
+		for(int i = 0; i < maxHashBuckets; i++) {
+			bucketCounts += dynoClient.hlen(messageKeyPrefix + i + "." + queueName);
+		}
+		assertEquals(0, bucketCounts);
 	}
 	
 	@Test

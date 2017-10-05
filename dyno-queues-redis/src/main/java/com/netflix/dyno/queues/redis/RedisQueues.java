@@ -29,7 +29,7 @@ import redis.clients.jedis.JedisCommands;
 /**
  * @author Viren
  *
- * Please note that you should take care for disposing resource related to RedisQueue insatance - that menas you
+ * Please note that you should take care for disposing resource related to RedisQueue instances - that means you
  * should call close() on RedisQueue instance.
  */
 public class RedisQueues implements Closeable {
@@ -71,7 +71,7 @@ public class RedisQueues implements Closeable {
 		this.unackHandlerIntervalInMS = unackHandlerIntervalInMS;
 		this.queues = new ConcurrentHashMap<>();
 	}
-
+	
 	/**
 	 *
 	 * @param queueName Name of the queue
