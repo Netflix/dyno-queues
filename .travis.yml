@@ -16,6 +16,8 @@ before_script:
     - export REDIS_VERSION="$(redis-cli INFO SERVER | sed -n 2p)"
     - echo $REDIS_VERSION
     - cd $TRAVIS_BUILD_DIR
+    - ls -la
+    - git status .
 after_success:
   - redis-cli SHUTDOWN NOSAVE
 after_failure:
