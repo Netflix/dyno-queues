@@ -3,6 +3,7 @@ jdk:
 - oraclejdk8
 install:
     - export REDIS_BIN=$HOME/redis/3.0.7/bin
+    - export TMPDIR=/tmp
     - wget -c https://github.com/antirez/redis/archive/3.0.7.tar.gz -O redis-3.0.7.tar.gz
     - mv redis-3.0.7.tar.gz $TMPDIR
     - cd $TMPDIR
