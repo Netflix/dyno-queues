@@ -4,6 +4,8 @@ jdk:
 install:
     - export REDIS_BIN=$HOME/redis/3.0.7/bin
     - wget -c https://github.com/antirez/redis/archive/3.0.7.tar.gz -O redis-3.0.7.tar.gz
+    - mv redis-3.0.7.tar.gz $TMPDIR
+    - cd $TMPDIR
     - tar -xvf redis-3.0.7.tar.gz
     - make -C redis-3.0.7 PREFIX=$HOME/redis/3.0.7 install
 before_script:
