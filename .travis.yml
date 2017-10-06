@@ -15,6 +15,7 @@ before_script:
     - $REDIS_BIN/redis-cli PING
     - export REDIS_VERSION="$(redis-cli INFO SERVER | sed -n 2p)"
     - echo $REDIS_VERSION
+    - cd $TRAVIS_BUILD_DIR
 after_success:
   - redis-cli SHUTDOWN NOSAVE
 after_failure:
