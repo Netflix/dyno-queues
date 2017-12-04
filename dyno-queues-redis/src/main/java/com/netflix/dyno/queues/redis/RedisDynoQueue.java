@@ -15,7 +15,24 @@
  */
 package com.netflix.dyno.queues.redis;
 
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.util.concurrent.Uninterruptibles;
+import com.netflix.dyno.connectionpool.exception.DynoException;
+import com.netflix.dyno.queues.DynoQueue;
+import com.netflix.dyno.queues.Message;
+import com.netflix.servo.monitor.Stopwatch;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import redis.clients.jedis.JedisCommands;
+import redis.clients.jedis.Tuple;
+import redis.clients.jedis.params.sortedset.ZAddParams;
+
 import java.io.IOException;
+import java.time.Clock;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -31,24 +48,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.Uninterruptibles;
-import com.netflix.dyno.connectionpool.exception.DynoException;
-import com.netflix.dyno.queues.DynoQueue;
-import com.netflix.dyno.queues.Message;
-import com.netflix.servo.monitor.Stopwatch;
-
-import redis.clients.jedis.JedisCommands;
-import redis.clients.jedis.Tuple;
-import redis.clients.jedis.params.sortedset.ZAddParams;
-
 /**
  *
  * @author Viren
@@ -57,6 +56,8 @@ import redis.clients.jedis.params.sortedset.ZAddParams;
 public class RedisDynoQueue implements DynoQueue {
 
 	private final Logger logger = LoggerFactory.getLogger(RedisDynoQueue.class);
+
+	private Clock clock;
 
 	private String queueName;
 
@@ -91,7 +92,13 @@ public class RedisDynoQueue implements DynoQueue {
 	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName) {
 		this(redisKeyPrefix, queueName, allShards, shardName, 60_000);
 	}
+
 	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, int unackScheduleInMS) {
+		this(Clock.systemDefaultZone(), redisKeyPrefix, queueName, allShards, shardName, unackScheduleInMS);
+	}
+
+	public RedisDynoQueue(Clock clock, String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, int unackScheduleInMS) {
+		this.clock = clock;
 		this.redisKeyPrefix = redisKeyPrefix;
 		this.queueName = queueName;
 		this.allShards = allShards.stream().collect(Collectors.toList());
@@ -157,7 +164,7 @@ public class RedisDynoQueue implements DynoQueue {
 					String json = om.writeValueAsString(message);
 					quorumConn.hset(messageStoreKey, message.getId(), json);
 					double priority = message.getPriority() / 100;
-					double score = Long.valueOf(System.currentTimeMillis() + message.getTimeout()).doubleValue() + priority;
+					double score = Long.valueOf(clock.millis() + message.getTimeout()).doubleValue() + priority;
 					String shard = getNextShard();
 					String queueShard = getQueueShardKey(queueName, shard);
 					quorumConn.zadd(queueShard, score, message.getId());
@@ -210,11 +217,11 @@ public class RedisDynoQueue implements DynoQueue {
 
 		Stopwatch sw = monitor.start(monitor.pop, messageCount);
 		try {
-			long start = System.currentTimeMillis();
+			long start = clock.millis();
 			long waitFor = unit.toMillis(wait);
 			prefetch.addAndGet(messageCount);
 			prefetchIds();
-			while(prefetchedIds.size() < messageCount && ((System.currentTimeMillis() - start) < waitFor)) {				
+			while(prefetchedIds.size() < messageCount && ((clock.millis() - start) < waitFor)) {
 				Uninterruptibles.sleepUninterruptibly(200, TimeUnit.MILLISECONDS);
 				prefetchIds();
 			}
@@ -255,7 +262,7 @@ public class RedisDynoQueue implements DynoQueue {
 
 	private List<Message> _pop(int messageCount) throws Exception {
 
-		double unackScore = Long.valueOf(System.currentTimeMillis() + unackTime).doubleValue();
+		double unackScore = Long.valueOf(clock.millis() + unackTime).doubleValue();
 		String unackQueueName = getUnackKey(queueName, shardName);
 
 		List<Message> popped = new LinkedList<>();
@@ -343,7 +350,7 @@ public class RedisDynoQueue implements DynoQueue {
 		try {
 
 			return execute(() -> {
-				double unackScore = Long.valueOf(System.currentTimeMillis() + timeout).doubleValue();
+				double unackScore = Long.valueOf(clock.millis() + timeout).doubleValue();
 				for (String shard : allShards) {
 
 					String unackShardKey = getUnackKey(queueName, shard);
@@ -379,7 +386,7 @@ public class RedisDynoQueue implements DynoQueue {
 				Double score = quorumConn.zscore(queueShard, messageId);
 				if(score != null) {
 					double priorityd = message.getPriority() / 100;
-					double newScore = Long.valueOf(System.currentTimeMillis() + timeout).doubleValue() + priorityd;
+					double newScore = Long.valueOf(clock.millis() + timeout).doubleValue() + priorityd;
 					ZAddParams params = ZAddParams.zAddParams().xx();
 					quorumConn.zadd(queueShard, newScore, messageId, params);
 					json = om.writeValueAsString(message);
@@ -510,7 +517,7 @@ public class RedisDynoQueue implements DynoQueue {
 	private Set<String> peekIds(int offset, int count) {
 
 		return execute(() -> {
-			double now = Long.valueOf(System.currentTimeMillis() + 1).doubleValue();
+			double now = Long.valueOf(clock.millis() + 1).doubleValue();
 			Set<String> scanned = quorumConn.zrangeByScore(myQueueShard, 0, now, offset, count);
 			return scanned;
 		});
@@ -530,7 +537,7 @@ public class RedisDynoQueue implements DynoQueue {
 				int batchSize = 1_000;
 				String unackQueueName = getUnackKey(queueName, shardName);
 
-				double now = Long.valueOf(System.currentTimeMillis()).doubleValue();
+				double now = Long.valueOf(clock.millis()).doubleValue();
 
 				Set<Tuple> unacks = quorumConn.zrangeByScoreWithScores(unackQueueName, 0, now, 0, batchSize);
 

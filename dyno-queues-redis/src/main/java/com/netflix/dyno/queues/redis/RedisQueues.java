@@ -15,16 +15,16 @@
  */
 package com.netflix.dyno.queues.redis;
 
+import com.netflix.dyno.queues.DynoQueue;
+import com.netflix.dyno.queues.ShardSupplier;
+import redis.clients.jedis.JedisCommands;
+
 import java.io.Closeable;
 import java.io.IOException;
+import java.time.Clock;
 import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-
-import com.netflix.dyno.queues.DynoQueue;
-import com.netflix.dyno.queues.ShardSupplier;
-
-import redis.clients.jedis.JedisCommands;
 
 /**
  * @author Viren
@@ -33,6 +33,8 @@ import redis.clients.jedis.JedisCommands;
  * should call close() on RedisQueue instance.
  */
 public class RedisQueues implements Closeable {
+
+	private Clock clock;
 
 	private JedisCommands quorumConn;
 
@@ -51,7 +53,6 @@ public class RedisQueues implements Closeable {
 	private ConcurrentHashMap<String, DynoQueue> queues;
 
 	/**
-	 *
 	 * @param quorumConn Dyno connection with dc_quorum enabled
 	 * @param nonQuorumConn	Dyno connection to local Redis
 	 * @param redisKeyPrefix	prefix applied to the Redis keys
@@ -59,9 +60,21 @@ public class RedisQueues implements Closeable {
 	 * @param unackTime	Time in millisecond within which a message needs to be acknowledged by the client, after which the message is re-queued.
 	 * @param unackHandlerIntervalInMS	Time in millisecond at which the un-acknowledgement processor runs
 	 */
-	public RedisQueues(JedisCommands quorumConn, JedisCommands nonQuorumConn, String redisKeyPrefix, ShardSupplier shardSupplier, int unackTime,
-			int unackHandlerIntervalInMS) {
+	public RedisQueues(JedisCommands quorumConn, JedisCommands nonQuorumConn, String redisKeyPrefix, ShardSupplier shardSupplier, int unackTime, int unackHandlerIntervalInMS) {
+		this(Clock.systemDefaultZone(), quorumConn, nonQuorumConn, redisKeyPrefix, shardSupplier, unackTime, unackHandlerIntervalInMS);
+	}
 
+	/**
+	 * @param clock Time provider
+	 * @param quorumConn Dyno connection with dc_quorum enabled
+	 * @param nonQuorumConn	Dyno connection to local Redis
+	 * @param redisKeyPrefix	prefix applied to the Redis keys
+	 * @param shardSupplier	Provider for the shards for the queues created
+	 * @param unackTime	Time in millisecond within which a message needs to be acknowledged by the client, after which the message is re-queued.
+	 * @param unackHandlerIntervalInMS	Time in millisecond at which the un-acknowledgement processor runs
+	 */
+	public RedisQueues(Clock clock, JedisCommands quorumConn, JedisCommands nonQuorumConn, String redisKeyPrefix, ShardSupplier shardSupplier, int unackTime, int unackHandlerIntervalInMS) {
+		this.clock = clock;
 		this.quorumConn = quorumConn;
 		this.nonQuorumConn = nonQuorumConn;
 		this.redisKeyPrefix = redisKeyPrefix;
@@ -88,7 +101,7 @@ public class RedisQueues implements Closeable {
 		}
 
 		synchronized (this) {
-			queue = new RedisDynoQueue(redisKeyPrefix, queueName, allShards, shardName, unackHandlerIntervalInMS)
+			queue = new RedisDynoQueue(clock, redisKeyPrefix, queueName, allShards, shardName, unackHandlerIntervalInMS)
 							.withUnackTime(unackTime)
 							.withNonQuorumConn(nonQuorumConn)
 							.withQuorumConn(quorumConn);
