@@ -15,17 +15,6 @@
  */
 package com.netflix.dyno.queues.redis;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Lists;
@@ -38,9 +27,20 @@ import com.netflix.discovery.shared.Application;
 import com.netflix.dyno.connectionpool.Host;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
-
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
+
+import java.io.IOException;
+import java.time.Clock;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 /**
  * @author Viren
@@ -217,6 +217,8 @@ public class MultiRedisQueue implements DynoQueue {
 
 
 	public static class Builder {
+
+		private Clock clock;
 		
 		private String queueName;
 		
@@ -239,6 +241,15 @@ public class MultiRedisQueue implements DynoQueue {
 		private int nonQuorumPort;	
 		
 		private List<Host> hosts;
+
+		/**
+		 * @param clock the Clock instance to set
+		 * @return instance of builder
+		 */
+		public Builder setClock(Clock clock) {
+			this.clock = clock;
+			return this;
+		}
 		
 		/**
 		 * @param queueName the queueName to set
@@ -336,6 +347,9 @@ public class MultiRedisQueue implements DynoQueue {
 		}
 
 		public MultiRedisQueue build() {
+			if (clock == null) {
+				clock = Clock.systemDefaultZone();
+			}
 			if(hosts == null) {
 				hosts = getHostsFromEureka(ec, dynomiteClusterName);
 			}
@@ -352,15 +366,14 @@ public class MultiRedisQueue implements DynoQueue {
 			config.setMaxIdle(5);
 			config.setMaxWaitMillis(60_000);
 
-			
 			Map<String, RedisQueue> queues = new HashMap<>();
 			for(String queueShard : shardMap.keySet()) {
 				String host = shardMap.get(queueShard).getIpAddress();
 				
 				JedisPool pool = new JedisPool(config, host, quorumPort, 0);
 				JedisPool readPool = new JedisPool(config, host, nonQuorumPort, 0);
-				
-				RedisQueue q = new RedisQueue(redisKeyPrefix, queueName, queueShard, unackTime, pool);
+
+				RedisQueue q = new RedisQueue(clock, redisKeyPrefix, queueName, queueShard, unackTime, unackTime, pool);
 				q.setNonQuorumPool(readPool);
 				queues.put(queueShard, q);
 			}

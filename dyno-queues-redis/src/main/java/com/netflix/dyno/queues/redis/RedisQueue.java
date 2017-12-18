@@ -15,7 +15,26 @@
  */
 package com.netflix.dyno.queues.redis;
 
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.netflix.dyno.connectionpool.HashPartitioner;
+import com.netflix.dyno.connectionpool.impl.hash.Murmur3HashPartitioner;
+import com.netflix.dyno.queues.DynoQueue;
+import com.netflix.dyno.queues.Message;
+import com.netflix.servo.monitor.Stopwatch;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.Pipeline;
+import redis.clients.jedis.Response;
+import redis.clients.jedis.Tuple;
+import redis.clients.jedis.params.sortedset.ZAddParams;
+
 import java.io.IOException;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -28,26 +47,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.netflix.dyno.connectionpool.HashPartitioner;
-import com.netflix.dyno.connectionpool.impl.hash.Murmur3HashPartitioner;
-import com.netflix.dyno.queues.DynoQueue;
-import com.netflix.dyno.queues.Message;
-import com.netflix.servo.monitor.Stopwatch;
-
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.Pipeline;
-import redis.clients.jedis.Response;
-import redis.clients.jedis.Tuple;
-import redis.clients.jedis.params.sortedset.ZAddParams;
-
 /**
  *
  * @author Viren
@@ -56,6 +55,8 @@ import redis.clients.jedis.params.sortedset.ZAddParams;
 public class RedisQueue implements DynoQueue {
 
 	private final Logger logger = LoggerFactory.getLogger(RedisQueue.class);
+
+	private Clock clock;
 
 	private String queueName;
 
@@ -90,6 +91,11 @@ public class RedisQueue implements DynoQueue {
 	}
 
 	public RedisQueue(String redisKeyPrefix, String queueName, String shardName, int unackScheduleInMS, int unackTime, JedisPool pool) {
+		this(Clock.systemDefaultZone(), redisKeyPrefix, queueName, shardName, unackScheduleInMS, unackTime, pool);
+	}
+
+	public RedisQueue(Clock clock, String redisKeyPrefix, String queueName, String shardName, int unackScheduleInMS, int unackTime, JedisPool pool) {
+		this.clock = clock;
 		this.queueName = queueName;
 		this.shardName = shardName;
 		this.messageStoreKeyPrefix = redisKeyPrefix + ".MESSAGE.";
@@ -150,7 +156,7 @@ public class RedisQueue implements DynoQueue {
 				String json = om.writeValueAsString(message);
 				pipe.hset(messageStoreKey(message.getId()), message.getId(), json);
 				double priority = message.getPriority() / 100.0;
-				double score = Long.valueOf(System.currentTimeMillis() + message.getTimeout()).doubleValue() + priority;
+				double score = Long.valueOf(clock.millis() + message.getTimeout()).doubleValue() + priority;
 				pipe.zadd(myQueueShard, score, message.getId());
 			}
 			pipe.sync();
@@ -237,7 +243,7 @@ public class RedisQueue implements DynoQueue {
 
 	private List<Message> _pop(List<String> batch) throws Exception {
 
-		double unackScore = Long.valueOf(System.currentTimeMillis() + unackTime).doubleValue();
+		double unackScore = Long.valueOf(clock.millis() + unackTime).doubleValue();
 
 		List<Message> popped = new LinkedList<>();
 		ZAddParams zParams = ZAddParams.zAddParams().nx();
@@ -371,7 +377,7 @@ public class RedisQueue implements DynoQueue {
 
 		try {
 
-			double unackScore = Long.valueOf(System.currentTimeMillis() + timeout).doubleValue();
+			double unackScore = Long.valueOf(clock.millis() + timeout).doubleValue();
 			Double score = jedis.zscore(unackShardKey(messageId), messageId);
 			if (score != null) {
 				jedis.zadd(unackShardKey(messageId), unackScore, messageId);
@@ -402,7 +408,7 @@ public class RedisQueue implements DynoQueue {
 			Double score = jedis.zscore(myQueueShard, messageId);
 			if (score != null) {
 				double priorityd = message.getPriority() / 100.0;
-				double newScore = Long.valueOf(System.currentTimeMillis() + timeout).doubleValue() + priorityd;
+				double newScore = Long.valueOf(clock.millis() + timeout).doubleValue() + priorityd;
 				jedis.zadd(myQueueShard, newScore, messageId);
 				json = om.writeValueAsString(message);
 				jedis.hset(messageStoreKey(message.getId()), message.getId(), json);
@@ -537,7 +543,7 @@ public class RedisQueue implements DynoQueue {
 	private Set<String> peekIds(int offset, int count) {
 		Jedis jedis = connPool.getResource();
 		try {
-			double now = Long.valueOf(System.currentTimeMillis() + 1).doubleValue();
+			double now = Long.valueOf(clock.millis() + 1).doubleValue();
 			Set<String> scanned = jedis.zrangeByScore(myQueueShard, 0, now, offset, count);
 			return scanned;
 		} finally {
@@ -566,7 +572,7 @@ public class RedisQueue implements DynoQueue {
 	
 				int batchSize = 1_000;
 	
-				double now = Long.valueOf(System.currentTimeMillis()).doubleValue();
+				double now = Long.valueOf(clock.millis()).doubleValue();
 	
 				Set<Tuple> unacks = jedis.zrangeByScoreWithScores(unackShardKey, 0, now, 0, batchSize);
 	
