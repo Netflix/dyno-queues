@@ -163,7 +163,7 @@ public class RedisDynoQueue implements DynoQueue {
 				for (Message message : messages) {
 					String json = om.writeValueAsString(message);
 					quorumConn.hset(messageStoreKey, message.getId(), json);
-					double priority = message.getPriority() / 100;
+					double priority = message.getPriority() / 100.0;
 					double score = Long.valueOf(clock.millis() + message.getTimeout()).doubleValue() + priority;
 					String shard = getNextShard();
 					String queueShard = getQueueShardKey(queueName, shard);
