@@ -32,6 +32,7 @@ import org.junit.Test;
 
 import com.netflix.dyno.connectionpool.Host;
 import com.netflix.dyno.connectionpool.Host.Status;
+import com.netflix.dyno.queues.shard.DynoShardSupplier;
 import com.netflix.dyno.connectionpool.HostSupplier;
 
 /**

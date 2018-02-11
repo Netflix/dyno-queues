@@ -4,13 +4,15 @@
 package com.netflix.dyno.queues.redis;
 
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import com.netflix.dyno.connectionpool.Host;
+import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
 
-import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
 /**
@@ -19,18 +21,31 @@ import redis.clients.jedis.JedisPoolConfig;
  */
 public class BenchmarkTests {
 
-	private RedisQueue queue;
+	private DynoQueue queue;
 	
 	public BenchmarkTests() {
+		List<Host> hosts = new LinkedList<>();
+		hosts.add(new Host("localhost", 6379, "us-east-1a"));
+		QueueBuilder qb = new QueueBuilder();
+		
 		JedisPoolConfig config = new JedisPoolConfig();
 		config.setTestOnBorrow(true);
 		config.setTestOnCreate(true);
 		config.setMaxTotal(10);
 		config.setMaxIdle(5);
 		config.setMaxWaitMillis(60_000);
-		JedisPool pool = new JedisPool(config, "localhost", 6379);
-		queue = new RedisQueue("perf", "TEST_QUEUE", "x", 60000_000, pool);
 		
+		
+		queue = qb
+				.setCurrentShard("a")			
+				.setHostToShardMap((Host h) -> h.getRack().substring(h.getRack().length()-1))
+				.setQueueName("testq")
+				.setRedisKeyPrefix("keyprefix")
+				.setUnackTime(60_000_000)
+				.useNonDynomiteRedis(config, hosts)
+				.build();
+		
+		System.out.println("Instance: " + queue.getClass().getName());
 	}
 	
 	public void publish() {
@@ -55,9 +70,10 @@ public class BenchmarkTests {
 	
 	public void consume() {
 		try {
+
 			long s = System.currentTimeMillis();
 			int loopCount = 100;
-			int batchSize = 2000;
+			int batchSize = 3500;
 			int count = 0;
 			for(int i = 0; i < loopCount; i++) {
 				List<Message> popped = queue.pop(batchSize, 1, TimeUnit.MILLISECONDS);
@@ -67,7 +83,7 @@ public class BenchmarkTests {
 			long e = System.currentTimeMillis();
 			long diff = e-s;
 			long throughput = 1000 * ((count)/diff); 
-			System.out.println("Consume time: " + diff + ", read throughput: " + throughput + " msg/sec, read: " + count);
+			System.out.println("Consume time: " + diff + ", read throughput: " + throughput + " msg/sec, messages read: " + count);
 		}catch(Exception e) {
 			e.printStackTrace();
 		}
@@ -86,13 +102,11 @@ public class BenchmarkTests {
 		try {
 			
 			BenchmarkTests tests = new BenchmarkTests();
-			
-			for(int i = 0; i < 20; i++) {
-				tests.publish();
-				tests.consume();
-			}
-			
-		} finally {
+			tests.publish();
+			tests.consume();			
+		} catch(Exception e) {
+			e.printStackTrace();
+		}finally {
 			System.exit(0);
 		}
 	}

@@ -43,6 +43,7 @@ import org.junit.Test;
 
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.netflix.dyno.queues.Message;
+import com.netflix.dyno.queues.redis.conn.JedisProxy;
 
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
@@ -75,7 +76,8 @@ public class RedisDynoQueueTest2 {
 		JedisPool pool = new JedisPool(config, "localhost", 6379);
 		dynoClient = new Jedis("localhost", 6379, 0, 0);
 		dynoClient.flushAll();
-		rdq = new RedisQueue(redisKeyPrefix, queueName, "x", 1_000, pool);
+		
+		rdq = new RedisQueue(redisKeyPrefix, queueName, "x", 1_000, 1_000, new JedisProxy(pool));
 		messageKeyPrefix = redisKeyPrefix + ".MESSAGE.";
 	}
 

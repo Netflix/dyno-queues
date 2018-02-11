@@ -7,3 +7,5 @@ redis-3.0.7.tar.gz
 *.iml
 .idea
 .gradle
+.classpath
+.project

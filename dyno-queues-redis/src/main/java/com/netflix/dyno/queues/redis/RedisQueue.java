@@ -15,24 +15,6 @@
  */
 package com.netflix.dyno.queues.redis;
 
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.netflix.dyno.connectionpool.HashPartitioner;
-import com.netflix.dyno.connectionpool.impl.hash.Murmur3HashPartitioner;
-import com.netflix.dyno.queues.DynoQueue;
-import com.netflix.dyno.queues.Message;
-import com.netflix.servo.monitor.Stopwatch;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.Pipeline;
-import redis.clients.jedis.Response;
-import redis.clients.jedis.Tuple;
-import redis.clients.jedis.params.sortedset.ZAddParams;
-
 import java.io.IOException;
 import java.time.Clock;
 import java.util.ArrayList;
@@ -46,6 +28,25 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.netflix.dyno.connectionpool.HashPartitioner;
+import com.netflix.dyno.connectionpool.impl.hash.Murmur3HashPartitioner;
+import com.netflix.dyno.queues.DynoQueue;
+import com.netflix.dyno.queues.Message;
+import com.netflix.dyno.queues.redis.conn.Pipe;
+import com.netflix.dyno.queues.redis.conn.RedisConnection;
+import com.netflix.servo.monitor.Stopwatch;
+
+import redis.clients.jedis.Response;
+import redis.clients.jedis.Tuple;
+import redis.clients.jedis.params.sortedset.ZAddParams;
 
 /**
  *
@@ -74,9 +75,9 @@ public class RedisQueue implements DynoQueue {
 
 	private ObjectMapper om;
 
-	private JedisPool connPool;
+	private RedisConnection connPool;
 	
-	private JedisPool nonQuorumPool;
+	private RedisConnection nonQuorumPool;
 
 	private ScheduledExecutorService schedulerForUnacksProcessing;
 
@@ -84,17 +85,13 @@ public class RedisQueue implements DynoQueue {
 	
 	private HashPartitioner partitioner = new Murmur3HashPartitioner();
 	
-	private int maxHashBuckets = 1024;
+	private int maxHashBuckets = 32;
 
-	public RedisQueue(String redisKeyPrefix, String queueName, String shardName, int unackTime, JedisPool pool) {
-		this(redisKeyPrefix, queueName, shardName, unackTime, unackTime, pool);
-	}
-
-	public RedisQueue(String redisKeyPrefix, String queueName, String shardName, int unackScheduleInMS, int unackTime, JedisPool pool) {
+	public RedisQueue(String redisKeyPrefix, String queueName, String shardName, int unackScheduleInMS, int unackTime, RedisConnection pool) {
 		this(Clock.systemDefaultZone(), redisKeyPrefix, queueName, shardName, unackScheduleInMS, unackTime, pool);
 	}
 
-	public RedisQueue(Clock clock, String redisKeyPrefix, String queueName, String shardName, int unackScheduleInMS, int unackTime, JedisPool pool) {
+	public RedisQueue(Clock clock, String redisKeyPrefix, String queueName, String shardName, int unackScheduleInMS, int unackTime, RedisConnection pool) {
 		this.clock = clock;
 		this.queueName = queueName;
 		this.shardName = shardName;
@@ -121,7 +118,7 @@ public class RedisQueue implements DynoQueue {
 
 		schedulerForUnacksProcessing.scheduleAtFixedRate(() -> processUnacks(), unackScheduleInMS, unackScheduleInMS, TimeUnit.MILLISECONDS);
 
-		logger.info(RedisQueue.class.getName() + " is ready to serve " + queueName);
+		logger.info(RedisQueue.class.getName() + " is ready to serve " + queueName + ", shard=" + shardName);
 
 	}
 	
@@ -129,7 +126,7 @@ public class RedisQueue implements DynoQueue {
 	 * 
 	 * @param nonQuorumPool When using a cluster like Dynomite, which relies on the quorum reads, supply a separate non-quorum read connection for ops like size etc.
 	 */
-	public void setNonQuorumPool(JedisPool nonQuorumPool) {
+	public void setNonQuorumPool(RedisConnection nonQuorumPool) {
 		this.nonQuorumPool = nonQuorumPool;
 	}
 
@@ -147,10 +144,10 @@ public class RedisQueue implements DynoQueue {
 	public List<String> push(final List<Message> messages) {
 
 		Stopwatch sw = monitor.start(monitor.push, messages.size());
-		Jedis conn = connPool.getResource();
+		RedisConnection conn = connPool.getResource();
 		try {
 
-			Pipeline pipe = conn.pipelined();
+			Pipe pipe = conn.pipelined();
 
 			for (Message message : messages) {
 				String json = om.writeValueAsString(message);
@@ -188,7 +185,7 @@ public class RedisQueue implements DynoQueue {
 	public List<Message> peek(final int messageCount) {
 
 		Stopwatch sw = monitor.peek.start();
-		Jedis jedis = connPool.getResource();
+		RedisConnection jedis = connPool.getResource();
 
 		try {
 
@@ -248,10 +245,10 @@ public class RedisQueue implements DynoQueue {
 		List<Message> popped = new LinkedList<>();
 		ZAddParams zParams = ZAddParams.zAddParams().nx();
 
-		Jedis jedis = connPool.getResource();
+		RedisConnection jedis = connPool.getResource();
 		try {
 			
-			Pipeline pipe = jedis.pipelined();
+			Pipe pipe = jedis.pipelined();
 			List<Response<Long>> zadds = new ArrayList<>(batch.size());
 			for (int i = 0; i < batch.size(); i++) {
 				String msgId = batch.get(i);
@@ -317,7 +314,7 @@ public class RedisQueue implements DynoQueue {
 	public boolean ack(String messageId) {
 
 		Stopwatch sw = monitor.ack.start();
-		Jedis jedis = connPool.getResource();
+		RedisConnection jedis = connPool.getResource();
 
 		try {
 
@@ -339,8 +336,8 @@ public class RedisQueue implements DynoQueue {
 	public void ack(List<Message> messages) {
 
 		Stopwatch sw = monitor.ack.start();
-		Jedis jedis = connPool.getResource();
-		Pipeline pipe = jedis.pipelined();
+		RedisConnection jedis = connPool.getResource();
+		Pipe pipe = jedis.pipelined();
 		List<Response<Long>> responses = new LinkedList<>();
 		try {
 			for(Message msg : messages) {
@@ -359,7 +356,7 @@ public class RedisQueue implements DynoQueue {
 			pipe.sync();
 			pipe.close();
 			
-		} catch (IOException e) {
+		} catch (Exception e) {
 			throw new RuntimeException(e);
 		} finally {
 			jedis.close();
@@ -373,7 +370,7 @@ public class RedisQueue implements DynoQueue {
 	public boolean setUnackTimeout(String messageId, long timeout) {
 
 		Stopwatch sw = monitor.ack.start();
-		Jedis jedis = connPool.getResource();
+		RedisConnection jedis = connPool.getResource();
 
 		try {
 
@@ -395,7 +392,7 @@ public class RedisQueue implements DynoQueue {
 	@Override
 	public boolean setTimeout(String messageId, long timeout) {
 
-		Jedis jedis = connPool.getResource();
+		RedisConnection jedis = connPool.getResource();
 
 		try {
 			String json = jedis.hget(messageStoreKey(messageId), messageId);
@@ -429,7 +426,7 @@ public class RedisQueue implements DynoQueue {
 	public boolean remove(String messageId) {
 
 		Stopwatch sw = monitor.remove.start();
-		Jedis jedis = connPool.getResource();
+		RedisConnection jedis = connPool.getResource();
 
 		try {
 
@@ -454,7 +451,7 @@ public class RedisQueue implements DynoQueue {
 	public Message get(String messageId) {
 
 		Stopwatch sw = monitor.get.start();
-		Jedis jedis = connPool.getResource();
+		RedisConnection jedis = connPool.getResource();
 		try {
 
 			String json = jedis.hget(messageStoreKey(messageId), messageId);
@@ -480,7 +477,7 @@ public class RedisQueue implements DynoQueue {
 	public long size() {
 
 		Stopwatch sw = monitor.size.start();
-		Jedis jedis = nonQuorumPool.getResource();
+		RedisConnection jedis = nonQuorumPool.getResource();
 
 		try {
 			long size = jedis.zcard(myQueueShard);
@@ -496,7 +493,7 @@ public class RedisQueue implements DynoQueue {
 
 		Stopwatch sw = monitor.size.start();
 		Map<String, Map<String, Long>> shardSizes = new HashMap<>();
-		Jedis jedis = nonQuorumPool.getResource();
+		RedisConnection jedis = nonQuorumPool.getResource();
 		try {
 
 			long size = jedis.zcard(myQueueShard);
@@ -521,7 +518,7 @@ public class RedisQueue implements DynoQueue {
 
 	@Override
 	public void clear() {
-		Jedis jedis = connPool.getResource();
+		RedisConnection jedis = connPool.getResource();
 		try {
 
 			jedis.del(myQueueShard);
@@ -541,7 +538,7 @@ public class RedisQueue implements DynoQueue {
 	}
 
 	private Set<String> peekIds(int offset, int count) {
-		Jedis jedis = connPool.getResource();
+		RedisConnection jedis = connPool.getResource();
 		try {
 			double now = Long.valueOf(clock.millis() + 1).doubleValue();
 			Set<String> scanned = jedis.zrangeByScore(myQueueShard, 0, now, offset, count);
@@ -561,7 +558,7 @@ public class RedisQueue implements DynoQueue {
 	private void processUnacks(String unackShardKey) {
 
 		Stopwatch sw = monitor.processUnack.start();
-		Jedis jedis = connPool.getResource();
+		RedisConnection jedis = connPool.getResource();
 
 		try {
 
@@ -613,6 +610,4 @@ public class RedisQueue implements DynoQueue {
 		schedulerForPrefetchProcessing.shutdown();
 		monitor.close();
 	}
-	
-	
 }
