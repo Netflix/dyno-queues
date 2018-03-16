@@ -45,7 +45,7 @@ public class DynoShardSupplierTest {
 	public void test(){
 		HostSupplier hs = new HostSupplier() {
 			@Override
-			public Collection<Host> getHosts() {
+			public List<Host> getHosts() {
 				List<Host> hosts = new LinkedList<>();
 				hosts.add(new Host("host1", 8102, "us-east-1a", Status.Up));
 				hosts.add(new Host("host1", 8102, "us-east-1b", Status.Up));

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.netflix.dyno.queues.redis;
+package com.netflix.dyno.queues.redis.v2;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -27,10 +27,13 @@ import java.util.stream.Collectors;
 
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
+import com.netflix.dyno.queues.redis.RedisQueue;
 
 /**
  * @author Viren
- *
+ * MultiRedisQueue exposes a single queue using multiple redis queues.  Each RedisQueue is a shard.
+ * When pushing elements to the queue, does a round robin to push the message to one of the shards.
+ * When polling, the message is polled from the current shard (shardName) the instance is associated with.
  */
 public class MultiRedisQueue implements DynoQueue {
 
@@ -182,7 +185,8 @@ public class MultiRedisQueue implements DynoQueue {
 			queue.close();
 		}
 	}
-	
+
+	@Override
 	public void processUnacks() {
 		for(RedisQueue queue : queues.values()) {
 			queue.processUnacks();

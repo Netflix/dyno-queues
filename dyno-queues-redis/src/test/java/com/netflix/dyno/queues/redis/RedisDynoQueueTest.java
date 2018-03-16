@@ -70,7 +70,7 @@ public class RedisDynoQueueTest {
 
 		HostSupplier hs = new HostSupplier() {
 			@Override
-			public Collection<Host> getHosts() {
+			public List<Host> getHosts() {
 				List<Host> hosts = new LinkedList<>();
 				hosts.add(new Host("ec2-11-22-33-444.compute-0.amazonaws.com", 8102, "us-east-1d", Status.Up));
 				return hosts;

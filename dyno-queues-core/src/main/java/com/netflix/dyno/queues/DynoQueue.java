@@ -134,4 +134,9 @@ public interface DynoQueue extends Closeable {
 	 * Truncates the entire queue.  Use with caution!
 	 */
 	public void clear();
+
+	/**
+	 * Process un-acknowledged messages.  The messages which are polled by the client but not ack'ed are moved back to queue
+	 */
+	public void processUnacks();
 }

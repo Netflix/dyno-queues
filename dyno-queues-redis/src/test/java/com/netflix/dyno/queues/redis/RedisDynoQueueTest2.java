@@ -61,7 +61,7 @@ public class RedisDynoQueueTest2 {
 	
 	private static String messageKeyPrefix;
 	
-	private static int maxHashBuckets = 1024;
+	private static int maxHashBuckets = 32;
 	
 	@BeforeClass
 	public static void setUpBeforeClass() throws Exception {
@@ -291,7 +291,7 @@ public class RedisDynoQueueTest2 {
 		messages3.stream().forEach(System.out::println);
 		int bucketCounts = 0;
 		for(int i = 0; i < maxHashBuckets; i++) {
-			bucketCounts += dynoClient.hlen(messageKeyPrefix + i + "." + queueName);
+			bucketCounts += dynoClient.hlen(messageKeyPrefix + i + ".{" + queueName + "}");
 		}
 		assertEquals(10, bucketCounts);
 		

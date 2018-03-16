@@ -51,7 +51,8 @@ import java.util.stream.Collectors;
 /**
  *
  * @author Viren
- *
+ * Current Production (March 2018) recipe - well tested in production.
+ * Note, this recipe does not use redis pipelines and hence the throughput offered is less compared to v2 recipes.
  */
 public class RedisDynoQueue implements DynoQueue {
 
@@ -524,6 +525,7 @@ public class RedisDynoQueue implements DynoQueue {
 
 	}
 
+	@Override
 	public void processUnacks() {
 
 		Stopwatch sw = monitor.processUnack.start();

@@ -33,7 +33,8 @@ import com.netflix.servo.stats.StatsConfig;
 
 /**
  * @author Viren
- * Monitoring for the queue
+ * Monitoring for the queue, publishes the metrics using  servo
+ * https://github.com/Netflix/servo
  */
 public class QueueMonitor implements Closeable {
 
