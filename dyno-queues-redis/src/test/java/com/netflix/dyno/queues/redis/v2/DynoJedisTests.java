@@ -40,6 +40,10 @@ public class DynoJedisTests extends BaseQueueTests {
 
     private static int maxHashBuckets = 32;
 
+    public DynoJedisTests() {
+        super("dyno_queue_tests");
+    }
+
     @Override
     public DynoQueue getQueue(String redisKeyPrefix, String queueName) {
 

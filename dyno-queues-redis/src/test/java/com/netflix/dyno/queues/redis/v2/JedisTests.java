@@ -40,6 +40,10 @@ public class JedisTests extends BaseQueueTests {
 
     private static int maxHashBuckets = 32;
 
+    public JedisTests() {
+        super("jedis_queue_tests");
+    }
+
     @Override
     public DynoQueue getQueue(String redisKeyPrefix, String queueName) {
         JedisPoolConfig config = new JedisPoolConfig();
@@ -64,6 +68,8 @@ public class JedisTests extends BaseQueueTests {
                 .setUnackTime(1_000)
                 .useNonDynomiteRedis(config, hosts)
                 .build();
+
+        queue.clear();
 
         return queue;
 

@@ -36,7 +36,7 @@ import static org.junit.Assert.*;
 public abstract class BaseQueueTests {
 
 
-    protected static final String queueName = "test_queue";
+    private String queueName;
 
     protected static final String redisKeyPrefix = "testdynoqueues";
 
@@ -47,10 +47,13 @@ public abstract class BaseQueueTests {
 
     public abstract DynoQueue getQueue(String redisKeyPrefix, String queueName);
 
-    public BaseQueueTests() {
+    public BaseQueueTests(String queueName) {
+        this.queueName = queueName;
+        this.messageKeyPrefix = redisKeyPrefix + ".MESSAGE.";
 
         this.rdq = getQueue(redisKeyPrefix, queueName);
-        this.messageKeyPrefix = redisKeyPrefix + ".MESSAGE.";
+        this.rdq.clear();
+
     }
 
 
