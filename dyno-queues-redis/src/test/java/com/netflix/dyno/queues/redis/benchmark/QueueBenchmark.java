@@ -2,7 +2,6 @@ package com.netflix.dyno.queues.redis.benchmark;
 
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
-import com.netflix.dyno.queues.redis.RedisQueue;
 
 import java.util.*;
 import java.util.concurrent.ExecutorService;

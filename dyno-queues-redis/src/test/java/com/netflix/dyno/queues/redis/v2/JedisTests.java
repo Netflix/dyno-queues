@@ -13,13 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.netflix.dyno.queues.redis.pieline;
+package com.netflix.dyno.queues.redis.v2;
 
 import com.netflix.dyno.connectionpool.Host;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.redis.BaseQueueTests;
 import com.netflix.dyno.queues.redis.v2.QueueBuilder;
-import com.netflix.dyno.queues.redis.RedisQueue;
+import com.netflix.dyno.queues.redis.v2.RedisQueue;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;

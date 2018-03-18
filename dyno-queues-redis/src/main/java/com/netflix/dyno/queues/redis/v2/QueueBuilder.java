@@ -34,7 +34,6 @@ import com.netflix.dyno.connectionpool.Host;
 import com.netflix.dyno.connectionpool.HostSupplier;
 import com.netflix.dyno.jedis.DynoJedisClient;
 import com.netflix.dyno.queues.DynoQueue;
-import com.netflix.dyno.queues.redis.RedisQueue;
 import com.netflix.dyno.queues.redis.conn.DynoClientProxy;
 import com.netflix.dyno.queues.redis.conn.JedisProxy;
 import com.netflix.dyno.queues.redis.conn.RedisConnection;

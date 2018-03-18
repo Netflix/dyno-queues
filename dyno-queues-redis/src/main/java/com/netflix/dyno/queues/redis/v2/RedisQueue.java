@@ -13,24 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.netflix.dyno.queues.redis;
-
-import java.io.IOException;
-import java.time.Clock;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+package com.netflix.dyno.queues.redis.v2;
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -40,19 +23,27 @@ import com.netflix.dyno.connectionpool.HashPartitioner;
 import com.netflix.dyno.connectionpool.impl.hash.Murmur3HashPartitioner;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
+import com.netflix.dyno.queues.redis.QueueMonitor;
 import com.netflix.dyno.queues.redis.conn.Pipe;
 import com.netflix.dyno.queues.redis.conn.RedisConnection;
 import com.netflix.servo.monitor.Stopwatch;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Response;
 import redis.clients.jedis.Tuple;
 import redis.clients.jedis.params.sortedset.ZAddParams;
 
+import java.io.IOException;
+import java.time.Clock;
+import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
 /**
- *
  * @author Viren
  * Queue implementation that uses redis pipelines that improves the throughput under heavy load.
- *
  */
 public class RedisQueue implements DynoQueue {
 
@@ -87,6 +78,8 @@ public class RedisQueue implements DynoQueue {
     private HashPartitioner partitioner = new Murmur3HashPartitioner();
 
     private int maxHashBuckets = 32;
+
+    private int longPollWaitIntervalInMillis = 10;
 
     public RedisQueue(String redisKeyPrefix, String queueName, String shardName, int unackScheduleInMS, int unackTime, RedisConnection pool) {
         this(Clock.systemDefaultZone(), redisKeyPrefix, queueName, shardName, unackScheduleInMS, unackTime, pool);
@@ -125,7 +118,6 @@ public class RedisQueue implements DynoQueue {
     }
 
     /**
-     *
      * @param nonQuorumPool When using a cluster like Dynomite, which relies on the quorum reads, supply a separate non-quorum read connection for ops like size etc.
      */
     public void setNonQuorumPool(RedisConnection nonQuorumPool) {
@@ -212,11 +204,6 @@ public class RedisQueue implements DynoQueue {
         }
     }
 
-
-    //
-    //Note: This implementation does NOT support long polling.  The method itself is synchronized, so implementing long poll could potentially block other threads.
-    //When required, the long polling should be implemented on the caller side (ie the broker implementation using the recipe)
-    //
     @Override
     public synchronized List<Message> pop(int messageCount, int wait, TimeUnit unit) {
 
@@ -225,12 +212,36 @@ public class RedisQueue implements DynoQueue {
         }
 
         Stopwatch sw = monitor.start(monitor.pop, messageCount);
+        List<Message> messages = new LinkedList<>();
+        int remaining = messageCount;
+        long time = clock.millis() + unit.toMillis(wait);
 
         try {
 
-            List<String> peeked = peekIds(0, messageCount).stream().collect(Collectors.toList());
-            List<Message> popped = _pop(peeked);
-            return popped;
+            do {
+
+                List<String> peeked = peekIds(0, remaining).stream().collect(Collectors.toList());
+                List<Message> popped = _pop(peeked);
+                int poppedCount = popped.size();
+                if (poppedCount == messageCount) {
+                    messages = popped;
+                    break;
+                }
+                messages.addAll(popped);
+                remaining -= poppedCount;
+                if(clock.millis() > time) {
+                    break;
+                }
+
+                try {
+                    Thread.sleep(longPollWaitIntervalInMillis);
+                } catch (InterruptedException ie) {
+                    logger.error(ie.getMessage(), ie);
+                }
+
+            } while (remaining > 0);
+
+            return messages;
 
         } catch (Exception e) {
             throw new RuntimeException(e);
