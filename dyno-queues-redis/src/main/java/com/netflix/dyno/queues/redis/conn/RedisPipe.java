@@ -25,6 +25,7 @@ import redis.clients.jedis.params.sortedset.ZAddParams;
 /**
  * @author Viren
  *
+ * Pipeline abstraction for direct redis connection - when not using Dynomite.
  */
 public class RedisPipe implements Pipe {
 

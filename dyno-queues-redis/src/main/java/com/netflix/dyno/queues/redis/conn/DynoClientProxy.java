@@ -27,6 +27,7 @@ import redis.clients.jedis.Tuple;
 /**
  * @author Viren
  *
+ * Dynomite connection
  */
 public class DynoClientProxy implements RedisConnection {
 

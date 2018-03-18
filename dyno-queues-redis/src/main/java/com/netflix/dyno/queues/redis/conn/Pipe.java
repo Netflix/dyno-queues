@@ -30,49 +30,50 @@ import redis.clients.jedis.params.sortedset.ZAddParams;
  * </p>
  * @see DynoJedisPipeline
  * @see Pipeline
+ * The commands here reflects the RedisCommand structure.
  *
  */
 public interface Pipe {
 
 	/**
 	 * 
-	 * @param key
-	 * @param field
-	 * @param value
+	 * @param key The Key
+	 * @param field Field
+	 * @param value Value of the Field
 	 */
 	public void hset(String key, String field, String value);
 
 	/**
 	 * 
-	 * @param key
-	 * @param score
-	 * @param member
+	 * @param key The Key
+	 * @param score Score for the member
+	 * @param member Member to be added within the key
 	 * @return
 	 */
 	public Response<Long> zadd(String key, double score, String member);
 
 	/**
 	 * 
-	 * @param key
-	 * @param score
-	 * @param member
-	 * @param zParams
+	 * @param key The Key
+	 * @param score Score for the member
+	 * @param member Member to be added within the key
+	 * @param zParams Parameters
 	 * @return
 	 */
 	public Response<Long> zadd(String key, double score, String member, ZAddParams zParams);
 
 	/**
 	 * 
-	 * @param key
-	 * @param member
+	 * @param key The Key
+	 * @param member Member
 	 * @return
 	 */
 	public Response<Long> zrem(String key, String member);
 
 	/**
 	 * 
-	 * @param key
-	 * @param member
+	 * @param key The Key
+	 * @param member Member
 	 * @return
 	 */
 	public Response<String> hget(String key, String member);

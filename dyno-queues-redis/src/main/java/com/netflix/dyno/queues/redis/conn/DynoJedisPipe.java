@@ -25,6 +25,7 @@ import redis.clients.jedis.params.sortedset.ZAddParams;
 
 /**
  * @author Viren
+ * Pipeline abstraction for Dynomite Pipeline.
  */
 public class DynoJedisPipe implements Pipe {
 
