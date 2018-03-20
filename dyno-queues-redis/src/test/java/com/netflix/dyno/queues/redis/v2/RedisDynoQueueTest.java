@@ -79,7 +79,7 @@ public class RedisDynoQueueTest {
 		dynoClient.flushAll();
 		
 		rdq = new RedisQueue(redisKeyPrefix, queueName, "x", 1_000, 1_000, new JedisProxy(pool));
-		messageKeyPrefix = redisKeyPrefix + ".MESSAGE.";
+		messageKeyPrefix = redisKeyPrefix + ".MSG." + "{" + queueName + ".x}";
 	}
 
 	@Test
@@ -292,7 +292,7 @@ public class RedisDynoQueueTest {
 		messages3.stream().forEach(System.out::println);
 		int bucketCounts = 0;
 		for(int i = 0; i < maxHashBuckets; i++) {
-			bucketCounts += dynoClient.hlen(messageKeyPrefix + i + ".{" + queueName + "}");
+			bucketCounts += dynoClient.hlen(messageKeyPrefix + "." + i);
 		}
 		assertEquals(10, bucketCounts);
 		
@@ -311,7 +311,7 @@ public class RedisDynoQueueTest {
 		rdq.clear();
 		int bucketCounts = 0;
 		for(int i = 0; i < maxHashBuckets; i++) {
-			bucketCounts += dynoClient.hlen(messageKeyPrefix + i + "." + queueName);
+			bucketCounts += dynoClient.hlen(messageKeyPrefix + "." + i);
 		}
 		assertEquals(0, bucketCounts);
 	}

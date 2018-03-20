@@ -88,11 +88,12 @@ public class RedisQueue implements DynoQueue {
     public RedisQueue(Clock clock, String redisKeyPrefix, String queue, String shardName, int unackScheduleInMS, int unackTime, RedisConnection pool) {
         this.clock = clock;
         this.queueName = queue;
-        String qName = "{" + queue + "}";
+        String qName = "{" + queue + "." + shardName + "}";
         this.shardName = shardName;
-        this.messageStoreKeyPrefix = redisKeyPrefix + ".MESSAGE.";
-        this.myQueueShard = redisKeyPrefix + ".QUEUE." + qName + "." + shardName;
-        this.unackShardKeyPrefix = redisKeyPrefix + ".UNACK." + qName + "." + shardName + ".";
+
+        this.messageStoreKeyPrefix = redisKeyPrefix + ".MSG." + qName;
+        this.myQueueShard = redisKeyPrefix + ".QUEUE." + qName;
+        this.unackShardKeyPrefix = redisKeyPrefix + ".UNACK." + qName + ".";
         this.unackTime = unackTime;
         this.connPool = pool;
         this.nonQuorumPool = pool;
@@ -166,7 +167,7 @@ public class RedisQueue implements DynoQueue {
     private String messageStoreKey(String msgId) {
         Long hash = partitioner.hash(msgId);
         long bucket = hash % maxHashBuckets;
-        return messageStoreKeyPrefix + bucket + ".{" + queueName + "}";
+        return messageStoreKeyPrefix + "." + bucket;
     }
 
     private String unackShardKey(String messageId) {
@@ -539,11 +540,11 @@ public class RedisQueue implements DynoQueue {
 
             jedis.del(myQueueShard);
 
-            for (int i = 0; i < maxHashBuckets; i++) {
-                String unackShardKey = unackShardKeyPrefix + i;
+            for (int bucket = 0; bucket < maxHashBuckets; bucket++) {
+                String unackShardKey = unackShardKeyPrefix + bucket;
                 jedis.del(unackShardKey);
 
-                String messageStoreKey = messageStoreKeyPrefix + i + "." + queueName;
+                String messageStoreKey = messageStoreKeyPrefix + "." + bucket;
                 jedis.del(messageStoreKey);
 
             }
