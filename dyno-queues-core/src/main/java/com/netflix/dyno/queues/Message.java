@@ -107,7 +107,7 @@ public class Message {
      */
     public void setPriority(int priority) {
         if (priority < 0 || priority > 99) {
-            throw new IllegalArgumentException("prioirty MUST be between 0 and 99 (inclusive)");
+            throw new IllegalArgumentException("priority MUST be between 0 and 99 (inclusive)");
         }
         this.priority = priority;
     }
