@@ -5,8 +5,8 @@ buildscript {
     }
     
     dependencies {
-        classpath 'com.netflix.nebula:gradle-aggregate-javadocs-plugin:2.2.+'
-        classpath 'com.netflix.nebula:gradle-extra-configurations-plugin:3.0.3'
+        classpath 'com.netflix.nebula:gradle-aggregate-javadocs-plugin:3.0.1'
+        classpath 'com.netflix.nebula:gradle-extra-configurations-plugin:4.0.1'
     }
 }
 plugins {
@@ -29,7 +29,7 @@ subprojects {
     sourceCompatibility = 1.8
     targetCompatibility = 1.8
 
-	repositories {
+    repositories {
         jcenter()
     }
     
