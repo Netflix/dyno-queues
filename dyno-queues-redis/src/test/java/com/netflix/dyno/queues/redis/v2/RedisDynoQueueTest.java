@@ -37,7 +37,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import com.netflix.dyno.queues.redis.v2.RedisQueue;
+import com.netflix.dyno.queues.redis.v2.RedisPipelineQueue;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -58,7 +58,7 @@ public class RedisDynoQueueTest {
 
 	private static final String redisKeyPrefix = "testdynoqueues";
 
-	private static RedisQueue rdq;
+	private static RedisPipelineQueue rdq;
 	
 	private static String messageKeyPrefix;
 	
@@ -78,7 +78,7 @@ public class RedisDynoQueueTest {
 		dynoClient = new Jedis("localhost", 6379, 0, 0);
 		dynoClient.flushAll();
 		
-		rdq = new RedisQueue(redisKeyPrefix, queueName, "x", 1_000, 1_000, new JedisProxy(pool));
+		rdq = new RedisPipelineQueue(redisKeyPrefix, queueName, "x", 1_000, 1_000, new JedisProxy(pool));
 		messageKeyPrefix = redisKeyPrefix + ".MSG." + "{" + queueName + ".x}";
 	}
 

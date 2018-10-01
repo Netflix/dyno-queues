@@ -24,7 +24,7 @@ import com.netflix.dyno.jedis.DynoJedisClient;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.redis.BaseQueueTests;
 import com.netflix.dyno.queues.redis.v2.QueueBuilder;
-import com.netflix.dyno.queues.redis.v2.RedisQueue;
+import com.netflix.dyno.queues.redis.v2.RedisPipelineQueue;
 import redis.clients.jedis.Jedis;
 
 import java.util.*;
@@ -33,8 +33,7 @@ public class DynoJedisTests extends BaseQueueTests {
 
     private static Jedis dynoClient;
 
-
-    private static RedisQueue rdq;
+    private static RedisPipelineQueue rdq;
 
     private static String messageKeyPrefix;
 
