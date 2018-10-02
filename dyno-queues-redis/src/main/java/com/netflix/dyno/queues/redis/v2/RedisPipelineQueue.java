@@ -43,11 +43,11 @@ import java.util.stream.Collectors;
 
 /**
  * @author Viren
- * Queue implementation that uses redis pipelines that improves the throughput under heavy load.
+ * Queue implementation that uses Redis pipelines that improves the throughput under heavy load.
  */
-public class RedisQueue implements DynoQueue {
+public class RedisPipelineQueue implements DynoQueue {
 
-    private final Logger logger = LoggerFactory.getLogger(RedisQueue.class);
+    private final Logger logger = LoggerFactory.getLogger(RedisPipelineQueue.class);
 
     private Clock clock;
 
@@ -73,19 +73,17 @@ public class RedisQueue implements DynoQueue {
 
     private ScheduledExecutorService schedulerForUnacksProcessing;
 
-    private ScheduledExecutorService schedulerForPrefetchProcessing;
-
     private HashPartitioner partitioner = new Murmur3HashPartitioner();
 
     private int maxHashBuckets = 32;
 
     private int longPollWaitIntervalInMillis = 10;
 
-    public RedisQueue(String redisKeyPrefix, String queueName, String shardName, int unackScheduleInMS, int unackTime, RedisConnection pool) {
+    public RedisPipelineQueue(String redisKeyPrefix, String queueName, String shardName, int unackScheduleInMS, int unackTime, RedisConnection pool) {
         this(Clock.systemDefaultZone(), redisKeyPrefix, queueName, shardName, unackScheduleInMS, unackTime, pool);
     }
 
-    public RedisQueue(Clock clock, String redisKeyPrefix, String queue, String shardName, int unackScheduleInMS, int unackTime, RedisConnection pool) {
+    public RedisPipelineQueue(Clock clock, String redisKeyPrefix, String queue, String shardName, int unackScheduleInMS, int unackTime, RedisConnection pool) {
         this.clock = clock;
         this.queueName = queue;
         String qName = "{" + queue + "." + shardName + "}";
@@ -110,11 +108,10 @@ public class RedisQueue implements DynoQueue {
         this.monitor = new QueueMonitor(qName, shardName);
 
         schedulerForUnacksProcessing = Executors.newScheduledThreadPool(1);
-        schedulerForPrefetchProcessing = Executors.newScheduledThreadPool(1);
 
         schedulerForUnacksProcessing.scheduleAtFixedRate(() -> processUnacks(), unackScheduleInMS, unackScheduleInMS, TimeUnit.MILLISECONDS);
 
-        logger.info(RedisQueue.class.getName() + " is ready to serve " + qName + ", shard=" + shardName);
+        logger.info(RedisPipelineQueue.class.getName() + " is ready to serve " + qName + ", shard=" + shardName);
 
     }
 
@@ -634,7 +631,6 @@ public class RedisQueue implements DynoQueue {
     @Override
     public void close() throws IOException {
         schedulerForUnacksProcessing.shutdown();
-        schedulerForPrefetchProcessing.shutdown();
         monitor.close();
     }
 }

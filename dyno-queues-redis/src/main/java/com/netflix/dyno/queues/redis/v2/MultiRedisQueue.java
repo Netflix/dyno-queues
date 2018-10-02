@@ -40,11 +40,11 @@ public class MultiRedisQueue implements DynoQueue {
 
     private String name;
 
-    private Map<String, RedisQueue> queues = new HashMap<>();
+    private Map<String, RedisPipelineQueue> queues = new HashMap<>();
 
-    private RedisQueue me;
+    private RedisPipelineQueue me;
 
-    public MultiRedisQueue(String queueName, String shardName, Map<String, RedisQueue> queues) {
+    public MultiRedisQueue(String queueName, String shardName, Map<String, RedisPipelineQueue> queues) {
         this.name = queueName;
         this.queues = queues;
         this.me = queues.get(shardName);
@@ -71,12 +71,12 @@ public class MultiRedisQueue implements DynoQueue {
         List<String> ids = new LinkedList<>();
 
         for (int i = 0; i < size - 1; i++) {
-            RedisQueue queue = queues.get(getNextShard());
+            RedisPipelineQueue queue = queues.get(getNextShard());
             int start = i * partitionSize;
             int end = start + partitionSize;
             ids.addAll(queue.push(messages.subList(start, end)));
         }
-        RedisQueue queue = queues.get(getNextShard());
+        RedisPipelineQueue queue = queues.get(getNextShard());
         int start = (size - 1) * partitionSize;
 
         ids.addAll(queue.push(messages.subList(start, messages.size())));
@@ -164,7 +164,7 @@ public class MultiRedisQueue implements DynoQueue {
     @Override
     public Map<String, Map<String, Long>> shardSizes() {
         Map<String, Map<String, Long>> sizes = new HashMap<>();
-        for (Entry<String, RedisQueue> e : queues.entrySet()) {
+        for (Entry<String, RedisPipelineQueue> e : queues.entrySet()) {
             sizes.put(e.getKey(), e.getValue().shardSizes().get(e.getKey()));
         }
         return sizes;
@@ -180,14 +180,14 @@ public class MultiRedisQueue implements DynoQueue {
 
     @Override
     public void close() throws IOException {
-        for (RedisQueue queue : queues.values()) {
+        for (RedisPipelineQueue queue : queues.values()) {
             queue.close();
         }
     }
 
     @Override
     public void processUnacks() {
-        for (RedisQueue queue : queues.values()) {
+        for (RedisPipelineQueue queue : queues.values()) {
             queue.processUnacks();
         }
     }

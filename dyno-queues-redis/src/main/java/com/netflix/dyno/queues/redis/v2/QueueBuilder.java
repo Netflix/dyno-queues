@@ -52,8 +52,6 @@ public class QueueBuilder {
 
     private String queueName;
 
-    private EurekaClient ec;
-
     private String redisKeyPrefix;
 
     private int unackTime;
@@ -61,8 +59,6 @@ public class QueueBuilder {
     private String currentShard;
 
     private Function<Host, String> hostToShardMap;
-
-    private int nonQuorumPort;
 
     private HostSupplier hs;
 
@@ -156,7 +152,7 @@ public class QueueBuilder {
      *
      * @return Build an instance of the queue with supplied parameters.
      * @see MultiRedisQueue
-     * @see RedisQueue
+     * @see RedisPipelineQueue
      */
     public DynoQueue build() {
 
@@ -176,7 +172,7 @@ public class QueueBuilder {
         }
 
 
-        Map<String, RedisQueue> queues = new HashMap<>();
+        Map<String, RedisPipelineQueue> queues = new HashMap<>();
 
         for (String queueShard : shardMap.keySet()) {
 
@@ -197,7 +193,7 @@ public class QueueBuilder {
                 redisConnRead = new JedisProxy(pool);
             }
 
-            RedisQueue q = new RedisQueue(clock, redisKeyPrefix, queueName, queueShard, unackTime, unackTime, redisConn);
+            RedisPipelineQueue q = new RedisPipelineQueue(clock, redisKeyPrefix, queueName, queueShard, unackTime, unackTime, redisConn);
             q.setNonQuorumPool(redisConnRead);
 
             queues.put(queueShard, q);

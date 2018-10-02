@@ -41,7 +41,7 @@ public class MultiQueueTests {
     private static Jedis dynoClient;
 
 
-    private static RedisQueue rdq;
+    private static RedisPipelineQueue rdq;
 
     private static String messageKeyPrefix;
 
