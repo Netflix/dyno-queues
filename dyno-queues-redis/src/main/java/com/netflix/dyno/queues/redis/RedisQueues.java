@@ -17,6 +17,8 @@ package com.netflix.dyno.queues.redis;
 
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.ShardSupplier;
+import com.netflix.dyno.queues.redis.sharding.RoundRobinStrategy;
+import com.netflix.dyno.queues.redis.sharding.ShardingStrategy;
 import redis.clients.jedis.JedisCommands;
 
 import java.io.Closeable;
@@ -34,23 +36,25 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class RedisQueues implements Closeable {
 
-	private Clock clock;
+	private final Clock clock;
 
-	private JedisCommands quorumConn;
+	private final JedisCommands quorumConn;
 
-	private JedisCommands nonQuorumConn;
+	private final JedisCommands nonQuorumConn;
 
-	private Set<String> allShards;
+	private final Set<String> allShards;
 
-	private String shardName;
+	private final String shardName;
 
-	private String redisKeyPrefix;
+	private final String redisKeyPrefix;
 
-	private int unackTime;
+	private final int unackTime;
 
-	private int unackHandlerIntervalInMS;
+	private final int unackHandlerIntervalInMS;
 
-	private ConcurrentHashMap<String, DynoQueue> queues;
+	private final ConcurrentHashMap<String, DynoQueue> queues;
+
+	private final ShardingStrategy shardingStrategy;
 
 	/**
 	 * @param quorumConn Dyno connection with dc_quorum enabled
@@ -61,7 +65,7 @@ public class RedisQueues implements Closeable {
 	 * @param unackHandlerIntervalInMS	Time in millisecond at which the un-acknowledgement processor runs
 	 */
 	public RedisQueues(JedisCommands quorumConn, JedisCommands nonQuorumConn, String redisKeyPrefix, ShardSupplier shardSupplier, int unackTime, int unackHandlerIntervalInMS) {
-		this(Clock.systemDefaultZone(), quorumConn, nonQuorumConn, redisKeyPrefix, shardSupplier, unackTime, unackHandlerIntervalInMS);
+		this(Clock.systemDefaultZone(), quorumConn, nonQuorumConn, redisKeyPrefix, shardSupplier, unackTime, unackHandlerIntervalInMS, new RoundRobinStrategy());
 	}
 
 	/**
@@ -73,7 +77,7 @@ public class RedisQueues implements Closeable {
 	 * @param unackTime	Time in millisecond within which a message needs to be acknowledged by the client, after which the message is re-queued.
 	 * @param unackHandlerIntervalInMS	Time in millisecond at which the un-acknowledgement processor runs
 	 */
-	public RedisQueues(Clock clock, JedisCommands quorumConn, JedisCommands nonQuorumConn, String redisKeyPrefix, ShardSupplier shardSupplier, int unackTime, int unackHandlerIntervalInMS) {
+	public RedisQueues(Clock clock, JedisCommands quorumConn, JedisCommands nonQuorumConn, String redisKeyPrefix, ShardSupplier shardSupplier, int unackTime, int unackHandlerIntervalInMS, ShardingStrategy shardingStrategy) {
 		this.clock = clock;
 		this.quorumConn = quorumConn;
 		this.nonQuorumConn = nonQuorumConn;
@@ -83,8 +87,9 @@ public class RedisQueues implements Closeable {
 		this.unackTime = unackTime;
 		this.unackHandlerIntervalInMS = unackHandlerIntervalInMS;
 		this.queues = new ConcurrentHashMap<>();
+		this.shardingStrategy = shardingStrategy;
 	}
-	
+
 	/**
 	 *
 	 * @param queueName Name of the queue
@@ -95,20 +100,11 @@ public class RedisQueues implements Closeable {
 	public DynoQueue get(String queueName) {
 
 		String key = queueName.intern();
-		DynoQueue queue = this.queues.get(key);
-		if (queue != null) {
-			return queue;
-		}
 
-		synchronized (this) {
-			queue = new RedisDynoQueue(clock, redisKeyPrefix, queueName, allShards, shardName, unackHandlerIntervalInMS)
-							.withUnackTime(unackTime)
-							.withNonQuorumConn(nonQuorumConn)
-							.withQuorumConn(quorumConn);
-			this.queues.put(key, queue);
-		}
-
-		return queue;
+        return queues.computeIfAbsent(key, (keyToCompute) -> new RedisDynoQueue(clock, redisKeyPrefix, queueName, allShards, shardName, unackHandlerIntervalInMS, shardingStrategy)
+                .withUnackTime(unackTime)
+                .withNonQuorumConn(nonQuorumConn)
+                .withQuorumConn(quorumConn));
 	}
 
 	/**

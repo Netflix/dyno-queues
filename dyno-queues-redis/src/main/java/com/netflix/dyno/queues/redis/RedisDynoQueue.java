@@ -20,10 +20,12 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.netflix.dyno.connectionpool.exception.DynoException;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
+import com.netflix.dyno.queues.redis.sharding.ShardingStrategy;
 import com.netflix.servo.monitor.Stopwatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,37 +60,37 @@ public class RedisDynoQueue implements DynoQueue {
 
 	private final Logger logger = LoggerFactory.getLogger(RedisDynoQueue.class);
 
-	private Clock clock;
+	private final Clock clock;
 
-	private String queueName;
+	private final String queueName;
 
-	private List<String> allShards;
+	private final List<String> allShards;
 
-	private String shardName;
+	private final String shardName;
 
-	private String redisKeyPrefix;
+	private final String redisKeyPrefix;
 
-	private String messageStoreKey;
+	private final String messageStoreKey;
 
-	private String myQueueShard;
+	private final String myQueueShard;
 
-	private int unackTime = 60;
+	private volatile int unackTime = 60;
 
-	private QueueMonitor monitor;
+	private final QueueMonitor monitor;
 
-	private ObjectMapper om;
+	private final ObjectMapper om;
 
-	private JedisCommands quorumConn;
+	private volatile JedisCommands quorumConn;
 
-	private JedisCommands nonQuorumConn;
+	private volatile JedisCommands nonQuorumConn;
 	
-	private ConcurrentLinkedQueue<String> prefetchedIds;
+	private final ConcurrentLinkedQueue<String> prefetchedIds;
 
-	private ScheduledExecutorService schedulerForUnacksProcessing;
+	private final ScheduledExecutorService schedulerForUnacksProcessing;
 
-	private ScheduledExecutorService schedulerForPrefetchProcessing;
+	private final int retryCount = 2;
 
-	private int retryCount = 2;
+	private final ShardingStrategy shardingStrategy;
 	
 	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName) {
 		this(redisKeyPrefix, queueName, allShards, shardName, 60_000);
@@ -99,13 +101,18 @@ public class RedisDynoQueue implements DynoQueue {
 	}
 
 	public RedisDynoQueue(Clock clock, String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, int unackScheduleInMS) {
+		this(clock, redisKeyPrefix, queueName, allShards, shardName, unackScheduleInMS, null);
+	}
+
+	public RedisDynoQueue(Clock clock, String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, int unackScheduleInMS, ShardingStrategy shardingStrategy) {
 		this.clock = clock;
 		this.redisKeyPrefix = redisKeyPrefix;
 		this.queueName = queueName;
-		this.allShards = allShards.stream().collect(Collectors.toList());
+		this.allShards = ImmutableList.copyOf(allShards.stream().collect(Collectors.toList()));
 		this.shardName = shardName;
 		this.messageStoreKey = redisKeyPrefix + ".MESSAGE." + queueName;
 		this.myQueueShard = getQueueShardKey(queueName, shardName);
+		this.shardingStrategy = shardingStrategy;
 
 		ObjectMapper om = new ObjectMapper();
 		om.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -120,12 +127,10 @@ public class RedisDynoQueue implements DynoQueue {
 		this.prefetchedIds = new ConcurrentLinkedQueue<>();
 
 		schedulerForUnacksProcessing = Executors.newScheduledThreadPool(1);
-		schedulerForPrefetchProcessing = Executors.newScheduledThreadPool(1);
 
 		schedulerForUnacksProcessing.scheduleAtFixedRate(() -> processUnacks(), unackScheduleInMS, unackScheduleInMS, TimeUnit.MILLISECONDS);
 
 		logger.info(RedisDynoQueue.class.getName() + " is ready to serve " + queueName);
-
 	}
 
 	public RedisDynoQueue withQuorumConn(JedisCommands quorumConn){
@@ -166,7 +171,7 @@ public class RedisDynoQueue implements DynoQueue {
 					quorumConn.hset(messageStoreKey, message.getId(), json);
 					double priority = message.getPriority() / 100.0;
 					double score = Long.valueOf(clock.millis() + message.getTimeout()).doubleValue() + priority;
-					String shard = getNextShard();
+					String shard = shardingStrategy.getNextShard(allShards, message);
 					String queueShard = getQueueShardKey(queueName, shard);
 					quorumConn.zadd(queueShard, score, message.getId());
 				}
@@ -570,18 +575,6 @@ public class RedisDynoQueue implements DynoQueue {
 
 	}
 
-	private AtomicInteger nextShardIndex = new AtomicInteger(0);
-
-	private String getNextShard() {
-		int indx = nextShardIndex.incrementAndGet();
-		if (indx >= allShards.size()) {
-			nextShardIndex.set(0);
-			indx = 0;
-		}
-		String s = allShards.get(indx);
-		return s;
-	}
-
 	private String getQueueShardKey(String queueName, String shard) {
 		return redisKeyPrefix + ".QUEUE." + queueName + "." + shard;
 	}
@@ -616,7 +609,6 @@ public class RedisDynoQueue implements DynoQueue {
 	@Override
 	public void close() throws IOException {
 		schedulerForUnacksProcessing.shutdown();
-		schedulerForPrefetchProcessing.shutdown();
 		monitor.close();
 	}
 }
