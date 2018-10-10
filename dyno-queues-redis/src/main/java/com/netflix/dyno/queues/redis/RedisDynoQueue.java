@@ -92,16 +92,12 @@ public class RedisDynoQueue implements DynoQueue {
 
 	private final ShardingStrategy shardingStrategy;
 	
-	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName) {
-		this(redisKeyPrefix, queueName, allShards, shardName, 60_000);
+	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, ShardingStrategy shardingStrategy) {
+		this(redisKeyPrefix, queueName, allShards, shardName, 60_000, shardingStrategy);
 	}
 
-	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, int unackScheduleInMS) {
-		this(Clock.systemDefaultZone(), redisKeyPrefix, queueName, allShards, shardName, unackScheduleInMS);
-	}
-
-	public RedisDynoQueue(Clock clock, String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, int unackScheduleInMS) {
-		this(clock, redisKeyPrefix, queueName, allShards, shardName, unackScheduleInMS, null);
+	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, int unackScheduleInMS, ShardingStrategy shardingStrategy) {
+		this(Clock.systemDefaultZone(), redisKeyPrefix, queueName, allShards, shardName, unackScheduleInMS, shardingStrategy);
 	}
 
 	public RedisDynoQueue(Clock clock, String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, int unackScheduleInMS, ShardingStrategy shardingStrategy) {

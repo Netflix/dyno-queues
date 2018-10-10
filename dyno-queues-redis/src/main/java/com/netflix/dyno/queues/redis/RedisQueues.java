@@ -69,6 +69,20 @@ public class RedisQueues implements Closeable {
 	}
 
 	/**
+	 * @param quorumConn Dyno connection with dc_quorum enabled
+	 * @param nonQuorumConn	Dyno connection to local Redis
+	 * @param redisKeyPrefix	prefix applied to the Redis keys
+	 * @param shardSupplier	Provider for the shards for the queues created
+	 * @param unackTime	Time in millisecond within which a message needs to be acknowledged by the client, after which the message is re-queued.
+	 * @param unackHandlerIntervalInMS	Time in millisecond at which the un-acknowledgement processor runs
+	 * @param shardingStrategy sharding strategy responsible for calculating message's destination shard
+	 */
+	public RedisQueues(JedisCommands quorumConn, JedisCommands nonQuorumConn, String redisKeyPrefix, ShardSupplier shardSupplier, int unackTime, int unackHandlerIntervalInMS, ShardingStrategy shardingStrategy) {
+		this(Clock.systemDefaultZone(), quorumConn, nonQuorumConn, redisKeyPrefix, shardSupplier, unackTime, unackHandlerIntervalInMS, shardingStrategy);
+	}
+
+
+	/**
 	 * @param clock Time provider
 	 * @param quorumConn Dyno connection with dc_quorum enabled
 	 * @param nonQuorumConn	Dyno connection to local Redis
@@ -76,6 +90,7 @@ public class RedisQueues implements Closeable {
 	 * @param shardSupplier	Provider for the shards for the queues created
 	 * @param unackTime	Time in millisecond within which a message needs to be acknowledged by the client, after which the message is re-queued.
 	 * @param unackHandlerIntervalInMS	Time in millisecond at which the un-acknowledgement processor runs
+	 * @param shardingStrategy sharding strategy responsible for calculating message's destination shard
 	 */
 	public RedisQueues(Clock clock, JedisCommands quorumConn, JedisCommands nonQuorumConn, String redisKeyPrefix, ShardSupplier shardSupplier, int unackTime, int unackHandlerIntervalInMS, ShardingStrategy shardingStrategy) {
 		this.clock = clock;
