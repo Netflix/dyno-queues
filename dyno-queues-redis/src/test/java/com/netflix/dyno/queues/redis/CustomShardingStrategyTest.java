@@ -13,20 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.netflix.dyno.queues.redis.v2;
+package com.netflix.dyno.queues.redis;
 
 import com.netflix.dyno.connectionpool.Host;
 import com.netflix.dyno.connectionpool.HostSupplier;
 import com.netflix.dyno.queues.Message;
 import com.netflix.dyno.queues.ShardSupplier;
 import com.netflix.dyno.queues.jedis.JedisMock;
-import com.netflix.dyno.queues.redis.RedisDynoQueue;
-import com.netflix.dyno.queues.redis.RedisQueues;
 import com.netflix.dyno.queues.redis.sharding.ShardingStrategy;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
@@ -41,8 +40,8 @@ public class CustomShardingStrategyTest {
         @Override
         public String getNextShard(List<String> allShards, Message message) {
             int hashCodeAbs = Math.abs(message.getId().hashCode());
-            int calculatedShard = (hashCodeAbs % allShards.size()) + 1;
-            return Integer.toString(calculatedShard);
+            int calculatedShard = (hashCodeAbs % allShards.size());
+            return allShards.get(calculatedShard);
         }
     }
 
@@ -80,6 +79,11 @@ public class CustomShardingStrategyTest {
 
         Set<String> allShards = hs.getHosts().stream().map(host -> host.getRack().substring(host.getRack().length() - 2)).collect(Collectors.toSet());
 
+        Iterator<String> iterator = allShards.iterator();
+        String shard1Name = iterator.next();
+        String shard2Name = iterator.next();
+        String shard3Name = iterator.next();
+
         ShardSupplier shard1Supplier = new ShardSupplier() {
 
             @Override
@@ -89,7 +93,7 @@ public class CustomShardingStrategyTest {
 
             @Override
             public String getCurrentShard() {
-                return "1";
+                return shard1Name;
             }
         };
 
@@ -102,7 +106,7 @@ public class CustomShardingStrategyTest {
 
             @Override
             public String getCurrentShard() {
-                return "2";
+                return shard2Name;
             }
         };
 
@@ -116,7 +120,7 @@ public class CustomShardingStrategyTest {
 
             @Override
             public String getCurrentShard() {
-                return "3";
+                return shard3Name;
             }
         };
 
@@ -159,11 +163,8 @@ public class CustomShardingStrategyTest {
         shard1DynoQueue.push(messages);
 
         List<Message> popedFromShard1 = shard1DynoQueue.pop(1, 1, TimeUnit.SECONDS);
-
         List<Message> popedFromShard2 = shard2DynoQueue.pop(1, 1, TimeUnit.SECONDS);
-
         List<Message> popedFromShard3 = shard3DynoQueue.pop(1, 1, TimeUnit.SECONDS);
-
 
         assertEquals(0, popedFromShard1.size());
         assertEquals(1, popedFromShard2.size());
