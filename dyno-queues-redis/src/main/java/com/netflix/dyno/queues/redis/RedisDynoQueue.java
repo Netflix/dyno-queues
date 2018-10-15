@@ -86,8 +86,6 @@ public class RedisDynoQueue implements DynoQueue {
 
 	private ScheduledExecutorService schedulerForUnacksProcessing;
 
-	private ScheduledExecutorService schedulerForPrefetchProcessing;
-
 	private int retryCount = 2;
 	
 	public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName) {
@@ -120,7 +118,6 @@ public class RedisDynoQueue implements DynoQueue {
 		this.prefetchedIds = new ConcurrentLinkedQueue<>();
 
 		schedulerForUnacksProcessing = Executors.newScheduledThreadPool(1);
-		schedulerForPrefetchProcessing = Executors.newScheduledThreadPool(1);
 
 		schedulerForUnacksProcessing.scheduleAtFixedRate(() -> processUnacks(), unackScheduleInMS, unackScheduleInMS, TimeUnit.MILLISECONDS);
 
@@ -616,7 +613,6 @@ public class RedisDynoQueue implements DynoQueue {
 	@Override
 	public void close() throws IOException {
 		schedulerForUnacksProcessing.shutdown();
-		schedulerForPrefetchProcessing.shutdown();
 		monitor.close();
 	}
 }
