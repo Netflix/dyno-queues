@@ -49,35 +49,35 @@ public class RedisPipelineQueue implements DynoQueue {
 
     private final Logger logger = LoggerFactory.getLogger(RedisPipelineQueue.class);
 
-    private Clock clock;
+    private final Clock clock;
 
-    private String queueName;
+    private final String queueName;
 
-    private String shardName;
+    private final String shardName;
 
-    private String messageStoreKeyPrefix;
+    private final String messageStoreKeyPrefix;
 
-    private String myQueueShard;
+    private final String myQueueShard;
 
-    private String unackShardKeyPrefix;
+    private final String unackShardKeyPrefix;
 
-    private int unackTime = 60;
+    private final int unackTime;
 
-    private QueueMonitor monitor;
+    private final QueueMonitor monitor;
 
-    private ObjectMapper om;
+    private final ObjectMapper om;
 
-    private RedisConnection connPool;
+    private final RedisConnection connPool;
 
-    private RedisConnection nonQuorumPool;
+    private volatile RedisConnection nonQuorumPool;
 
-    private ScheduledExecutorService schedulerForUnacksProcessing;
+    private final ScheduledExecutorService schedulerForUnacksProcessing;
 
-    private HashPartitioner partitioner = new Murmur3HashPartitioner();
+    private final HashPartitioner partitioner = new Murmur3HashPartitioner();
 
-    private int maxHashBuckets = 32;
+    private final int maxHashBuckets = 32;
 
-    private int longPollWaitIntervalInMillis = 10;
+    private final int longPollWaitIntervalInMillis = 10;
 
     public RedisPipelineQueue(String redisKeyPrefix, String queueName, String shardName, int unackScheduleInMS, int unackTime, RedisConnection pool) {
         this(Clock.systemDefaultZone(), redisKeyPrefix, queueName, shardName, unackScheduleInMS, unackTime, pool);

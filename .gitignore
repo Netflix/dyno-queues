@@ -9,3 +9,7 @@ redis-3.0.7.tar.gz
 .gradle
 .classpath
 .project
+
+
+dyno-queues-core/out/
+dyno-queues-redis/out/
