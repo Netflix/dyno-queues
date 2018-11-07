@@ -160,8 +160,7 @@ public class RedisDynoQueue implements DynoQueue {
         Stopwatch sw = monitor.start(monitor.push, messages.size());
 
         try {
-
-            execute(() -> {
+            execute("push", "(a shard in) " + queueName, () -> {
                 for (Message message : messages) {
                     String json = om.writeValueAsString(message);
                     quorumConn.hset(messageStoreKey, message.getId(), json);
@@ -193,7 +192,7 @@ public class RedisDynoQueue implements DynoQueue {
                 return Collections.emptyList();
             }
 
-            List<Message> msgs = execute(() -> {
+            List<Message> msgs = execute("peek", messageStoreKey, () -> {
                 List<Message> messages = new LinkedList<Message>();
                 for (String id : ids) {
                     String json = nonQuorumConn.hget(messageStoreKey, id);
@@ -318,8 +317,7 @@ public class RedisDynoQueue implements DynoQueue {
         Stopwatch sw = monitor.ack.start();
 
         try {
-
-            return execute(() -> {
+            return execute("ack", "(a shard in) " + queueName, () -> {
 
                 for (String shard : allShards) {
                     String unackShardKey = getUnackKey(queueName, shard);
@@ -350,8 +348,7 @@ public class RedisDynoQueue implements DynoQueue {
         Stopwatch sw = monitor.ack.start();
 
         try {
-
-            return execute(() -> {
+            return execute("setUnackTimeout", "(a shard in) " + queueName, () -> {
                 double unackScore = Long.valueOf(clock.millis() + timeout).doubleValue();
                 for (String shard : allShards) {
 
@@ -373,7 +370,7 @@ public class RedisDynoQueue implements DynoQueue {
     @Override
     public boolean setTimeout(String messageId, long timeout) {
 
-        return execute(() -> {
+        return execute("setTimeout", "(a shard in) " + queueName, () -> {
 
             String json = nonQuorumConn.hget(messageStoreKey, messageId);
             if(json == null) {
@@ -407,7 +404,7 @@ public class RedisDynoQueue implements DynoQueue {
 
         try {
 
-            return execute(() -> {
+            return execute("remove", "(a shard in) " + queueName, () -> {
 
                 for (String shard : allShards) {
 
@@ -439,7 +436,7 @@ public class RedisDynoQueue implements DynoQueue {
 
         try {
 
-            return execute(() -> {
+            return execute("get", messageStoreKey, () -> {
                 String json = quorumConn.hget(messageStoreKey, messageId);
                 if(json == null){
                     if (logger.isDebugEnabled()) {
@@ -464,7 +461,7 @@ public class RedisDynoQueue implements DynoQueue {
 
         try {
 
-            return execute(() -> {
+            return execute("size", "(a shard in) " + queueName, () -> {
                 long size = 0;
                 for (String shard : allShards) {
                     size += nonQuorumConn.zcard(getQueueShardKey(queueName, shard));
@@ -484,7 +481,7 @@ public class RedisDynoQueue implements DynoQueue {
         Map<String, Map<String, Long>> shardSizes = new HashMap<>();
         try {
 
-            return execute(() -> {
+            return execute("shardSizes", "(a shard in) " + queueName, () -> {
                 for (String shard : allShards) {
                     long size = nonQuorumConn.zcard(getQueueShardKey(queueName, shard));
                     long uacked = nonQuorumConn.zcard(getUnackKey(queueName, shard));
@@ -503,7 +500,7 @@ public class RedisDynoQueue implements DynoQueue {
 
     @Override
     public void clear() {
-        execute(() -> {
+        execute("clear", "(a shard in) " + queueName, () -> {
             for (String shard : allShards) {
                 String queueShard = getQueueShardKey(queueName, shard);
                 String unackShard = getUnackKey(queueName, shard);
@@ -518,7 +515,7 @@ public class RedisDynoQueue implements DynoQueue {
 
     private Set<String> peekIds(int offset, int count) {
 
-        return execute(() -> {
+        return execute("peekIds", myQueueShard, () -> {
             double now = Long.valueOf(clock.millis() + 1).doubleValue();
             Set<String> scanned = quorumConn.zrangeByScore(myQueueShard, 0, now, offset, count);
             return scanned;
@@ -535,7 +532,8 @@ public class RedisDynoQueue implements DynoQueue {
             long queueDepth = size();
             monitor.queueDepth.record(queueDepth);
 
-            execute(() -> {
+            String keyName = getUnackKey(queueName, shardName);
+            execute("processUnacks", keyName, () -> {
 
                 int batchSize = 1_000;
                 String unackQueueName = getUnackKey(queueName, shardName);
@@ -579,11 +577,11 @@ public class RedisDynoQueue implements DynoQueue {
         return redisKeyPrefix + ".UNACK." + queueName + "." + shard;
     }
 
-    private <R> R execute(Callable<R> r) {
-        return executeWithRetry(r, 0);
+    private <R> R execute(String opName, String keyName, Callable<R> r) {
+        return executeWithRetry(opName, keyName, r, 0);
     }
 
-    private <R> R executeWithRetry(Callable<R> r, int retryCount) {
+    private <R> R executeWithRetry(String opName, String keyName, Callable<R> r, int retryCount) {
 
         try {
 
@@ -593,12 +591,13 @@ public class RedisDynoQueue implements DynoQueue {
 
             if (e.getCause() instanceof DynoException) {
                 if (retryCount < this.retryCount) {
-                    return executeWithRetry(r, ++retryCount);
+                    return executeWithRetry(opName, keyName, r, ++retryCount);
                 }
             }
             throw new RuntimeException(e.getCause());
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException(
+                    "Operation: ( " + opName + " ) failed on key: [" + keyName + " ].", e);
         }
     }
 
