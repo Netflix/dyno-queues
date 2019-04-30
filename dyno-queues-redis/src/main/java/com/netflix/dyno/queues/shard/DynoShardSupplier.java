@@ -40,7 +40,7 @@ public class DynoShardSupplier implements ShardSupplier {
 	 * Dynomite based shard supplier.  Keeps the number of shards in parity with the hosts and regions
 	 * @param hs Host supplier
 	 * @param region current region
-	 * @param localRack local data center identifier
+	 * @param localRack local rack identifier
 	 */
 	public DynoShardSupplier(HostSupplier hs, String region, String localRack) {
 		this.hs = hs;

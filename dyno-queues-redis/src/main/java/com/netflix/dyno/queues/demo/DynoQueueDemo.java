@@ -40,7 +40,7 @@ public class DynoQueueDemo extends DynoJedisDemo {
         try {
             demo.initWithRemoteClusterFromEurekaUrl(args[0], 8102);
 
-            demo.runSimpleQueueDemo(demo.client);
+            demo.runSimpleV2QueueDemo(demo.client);
             Thread.sleep(10000);
 
         } catch (Exception ex) {
@@ -51,11 +51,7 @@ public class DynoQueueDemo extends DynoJedisDemo {
         }
     }
 
-    private void runQueueDemoWithTimeOut(DynoJedisClient dyno) throws IOException {
-
-    }
-
-    private void runSimpleQueueDemo(DynoJedisClient dyno) throws IOException {
+    private void runSimpleV2QueueDemo(DynoJedisClient dyno) throws IOException {
         String region = System.getProperty("LOCAL_DATACENTER");
         String localRack = System.getProperty("LOCAL_RACK");
 
