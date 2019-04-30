@@ -15,15 +15,13 @@
  */
 package com.netflix.dyno.queues.redis.v2;
 
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import com.netflix.dyno.connectionpool.HashPartitioner;
 import com.netflix.dyno.connectionpool.impl.hash.Murmur3HashPartitioner;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
 import com.netflix.dyno.queues.redis.QueueMonitor;
+import com.netflix.dyno.queues.redis.QueueUtils;
 import com.netflix.dyno.queues.redis.conn.Pipe;
 import com.netflix.dyno.queues.redis.conn.RedisConnection;
 import com.netflix.servo.monitor.Stopwatch;
@@ -35,7 +33,13 @@ import redis.clients.jedis.params.sortedset.ZAddParams;
 
 import java.io.IOException;
 import java.time.Clock;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -96,15 +100,7 @@ public class RedisPipelineQueue implements DynoQueue {
         this.connPool = pool;
         this.nonQuorumPool = pool;
 
-        ObjectMapper om = new ObjectMapper();
-        om.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        om.configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES, false);
-        om.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);
-        om.setSerializationInclusion(Include.NON_NULL);
-        om.setSerializationInclusion(Include.NON_EMPTY);
-        om.disable(SerializationFeature.INDENT_OUTPUT);
-
-        this.om = om;
+        this.om = QueueUtils.constructObjectMapper();
         this.monitor = new QueueMonitor(qName, shardName);
 
         schedulerForUnacksProcessing = Executors.newScheduledThreadPool(1);

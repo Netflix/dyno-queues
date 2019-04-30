@@ -15,6 +15,9 @@
  */
 package com.netflix.dyno.queues.redis.v2;
 
+import com.netflix.dyno.queues.DynoQueue;
+import com.netflix.dyno.queues.Message;
+
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -24,9 +27,6 @@ import java.util.Map.Entry;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
-
-import com.netflix.dyno.queues.DynoQueue;
-import com.netflix.dyno.queues.Message;
 
 /**
  * @author Viren
