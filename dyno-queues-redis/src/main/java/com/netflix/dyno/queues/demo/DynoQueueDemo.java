@@ -26,6 +26,11 @@ public class DynoQueueDemo extends DynoJedisDemo {
         super(primaryCluster, shadowCluster, localRack);
     }
 
+    /**
+     * Provide the cluster name to connect to as an argument to the function.
+     * throws java.lang.RuntimeException: java.net.ConnectException: Connection timed out (Connection timed out)
+     * if the cluster is not reachable.
+     */
     public static void main(String[] args) throws IOException {
         final String clusterName = args[0];
 
