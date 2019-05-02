@@ -34,6 +34,7 @@ import redis.clients.jedis.Tuple;
 import redis.clients.jedis.params.sortedset.ZAddParams;
 
 import java.io.IOException;
+import java.lang.UnsupportedOperationException;
 import java.time.Clock;
 import java.util.*;
 import java.util.concurrent.Executors;
@@ -459,6 +460,11 @@ public class RedisPipelineQueue implements DynoQueue {
             jedis.close();
             sw.stop();
         }
+    }
+
+    @Override
+    public boolean ensure(Message message) {
+        throw new UnsupportedOperationException();
     }
 
     @Override

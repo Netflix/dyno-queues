@@ -108,6 +108,13 @@ public interface DynoQueue extends Closeable {
 	 */
 	public boolean remove(String messageId);
 	
+  /**
+   * Enqueues 'message' if it doesn't exist in any of the shards or unack sets.
+   *
+   * @param message Message to enqueue if it doesn't exist.
+   * @return true if message was enqueued. False if messageId already exists.
+   */
+  public boolean ensure(Message message);
 	
 	/**
 	 * 

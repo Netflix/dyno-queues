@@ -430,6 +430,29 @@ public class RedisDynoQueue implements DynoQueue {
     }
 
     @Override
+    public boolean ensure(Message message) {
+      return execute("ensure", "(a shard in) " + queueName, () -> {
+
+        String messageId = message.getId();
+        for (String shard : allShards) {
+
+          String queueShard = getQueueShardKey(queueName, shard);
+          Double score = quorumConn.zscore(queueShard, messageId);
+          if(score != null) {
+            return false;
+          }
+          String unackShardKey = getUnackKey(queueName, shard);
+          score = quorumConn.zscore(unackShardKey, messageId);
+          if(score != null) {
+            return false;
+          }
+        }
+        push(Collections.singletonList(message));
+        return true;
+      });
+    }
+
+    @Override
     public Message get(String messageId) {
 
         Stopwatch sw = monitor.get.start();

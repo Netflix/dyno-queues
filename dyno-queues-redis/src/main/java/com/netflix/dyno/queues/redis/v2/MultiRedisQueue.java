@@ -16,6 +16,7 @@
 package com.netflix.dyno.queues.redis.v2;
 
 import java.io.IOException;
+import java.lang.UnsupportedOperationException;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -139,6 +140,11 @@ public class MultiRedisQueue implements DynoQueue {
             }
         }
         return false;
+    }
+
+    @Override
+    public boolean ensure(Message message) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
