@@ -468,6 +468,9 @@ public class RedisPipelineQueue implements DynoQueue {
     }
 
     @Override
+    public boolean containsPredicate(String predicate) { throw new UnsupportedOperationException(); }
+
+    @Override
     public Message get(String messageId) {
 
         Stopwatch sw = monitor.get.start();
