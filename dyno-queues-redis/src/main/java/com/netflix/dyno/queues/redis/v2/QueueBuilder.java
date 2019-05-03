@@ -18,9 +18,6 @@
  */
 package com.netflix.dyno.queues.redis.v2;
 
-import java.time.Clock;
-import java.util.*;
-
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Lists;
@@ -37,9 +34,15 @@ import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.redis.conn.DynoClientProxy;
 import com.netflix.dyno.queues.redis.conn.JedisProxy;
 import com.netflix.dyno.queues.redis.conn.RedisConnection;
-
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
+
+import java.time.Clock;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * @author Viren
@@ -58,7 +61,7 @@ public class QueueBuilder {
 
     private String currentShard;
 
-    private Function<Host, String> hostToShardMap;
+    private Function<Host, String> hostToShardMap = (Host h) -> h.getRack();
 
     private HostSupplier hs;
 

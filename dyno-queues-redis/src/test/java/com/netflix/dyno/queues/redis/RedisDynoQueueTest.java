@@ -15,11 +15,17 @@
  */
 package com.netflix.dyno.queues.redis;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import com.google.common.util.concurrent.Uninterruptibles;
+import com.netflix.dyno.connectionpool.Host;
+import com.netflix.dyno.connectionpool.Host.Status;
+import com.netflix.dyno.connectionpool.HostSupplier;
+import com.netflix.dyno.queues.DynoQueue;
+import com.netflix.dyno.queues.Message;
+import com.netflix.dyno.queues.ShardSupplier;
+import com.netflix.dyno.queues.jedis.JedisMock;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -37,18 +43,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
-import com.google.common.util.concurrent.Uninterruptibles;
-import com.netflix.dyno.connectionpool.Host;
-import com.netflix.dyno.connectionpool.Host.Status;
-import com.netflix.dyno.connectionpool.HostSupplier;
-import com.netflix.dyno.queues.DynoQueue;
-import com.netflix.dyno.queues.Message;
-import com.netflix.dyno.queues.ShardSupplier;
-import com.netflix.dyno.queues.jedis.JedisMock;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public class RedisDynoQueueTest {
 
@@ -238,7 +237,7 @@ public class RedisDynoQueueTest {
 		long start = System.currentTimeMillis();
 		List<Message> more = rdq.pop(1, 1, TimeUnit.SECONDS);
 		long elapsedTime = System.currentTimeMillis() - start;
-		assertTrue(elapsedTime > 1000);
+		assertTrue(elapsedTime >= 1000);
 		assertEquals(0, more.size());
 		assertEquals(0, rdq.prefetch.get());
 		

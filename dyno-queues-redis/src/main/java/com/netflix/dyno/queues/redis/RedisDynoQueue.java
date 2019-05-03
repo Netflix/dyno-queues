@@ -15,14 +15,10 @@
  */
 package com.netflix.dyno.queues.redis;
 
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Uninterruptibles;
-import com.netflix.dyno.connectionpool.exception.DynoException;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
 import com.netflix.dyno.queues.redis.sharding.ShardingStrategy;
@@ -41,14 +37,14 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+
+import static com.netflix.dyno.queues.redis.QueueUtils.execute;
 
 /**
  *
@@ -110,15 +106,8 @@ public class RedisDynoQueue implements DynoQueue {
         this.myQueueShard = getQueueShardKey(queueName, shardName);
         this.shardingStrategy = shardingStrategy;
 
-        ObjectMapper om = new ObjectMapper();
-        om.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        om.configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES, false);
-        om.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);
-        om.setSerializationInclusion(Include.NON_NULL);
-        om.setSerializationInclusion(Include.NON_EMPTY);
-        om.disable(SerializationFeature.INDENT_OUTPUT);
 
-        this.om = om;
+        this.om = QueueUtils.constructObjectMapper();
         this.monitor = new QueueMonitor(queueName, shardName);
         this.prefetchedIds = new ConcurrentLinkedQueue<>();
 
@@ -598,30 +587,6 @@ public class RedisDynoQueue implements DynoQueue {
 
     private String getUnackKey(String queueName, String shard) {
         return redisKeyPrefix + ".UNACK." + queueName + "." + shard;
-    }
-
-    private <R> R execute(String opName, String keyName, Callable<R> r) {
-        return executeWithRetry(opName, keyName, r, 0);
-    }
-
-    private <R> R executeWithRetry(String opName, String keyName, Callable<R> r, int retryCount) {
-
-        try {
-
-            return r.call();
-
-        } catch (ExecutionException e) {
-
-            if (e.getCause() instanceof DynoException) {
-                if (retryCount < this.retryCount) {
-                    return executeWithRetry(opName, keyName, r, ++retryCount);
-                }
-            }
-            throw new RuntimeException(e.getCause());
-        } catch (Exception e) {
-            throw new RuntimeException(
-                    "Operation: ( " + opName + " ) failed on key: [" + keyName + " ].", e);
-        }
     }
 
     @Override

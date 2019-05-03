@@ -1,11 +1,12 @@
 dependencies {
     
     compile  project(':dyno-queues-core')
-    
+
     compile "com.google.inject:guice:3.0"
 
     compile 'com.netflix.dyno:dyno-core:1.6.5'
     compile 'com.netflix.dyno:dyno-jedis:1.6.5'
+    compile 'com.netflix.dyno:dyno-demo:1.6.5'
 
     compile 'com.netflix.archaius:archaius-core:0.7.5'
     compile 'com.netflix.servo:servo-core:0.12.17'
