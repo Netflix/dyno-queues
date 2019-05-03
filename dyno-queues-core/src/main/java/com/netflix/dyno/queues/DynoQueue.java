@@ -115,7 +115,19 @@ public interface DynoQueue extends Closeable {
    * @return true if message was enqueued. False if messageId already exists.
    */
   public boolean ensure(Message message);
-	
+
+	/**
+	 * Checks the message bodies (i.e. the data in the hash map), and returns true on the first match with
+	 * 'predicate'.
+	 *
+	 * Disclaimer: This is a potentially expensive call, since we will iterate over the entire hash map in the
+	 * worst case. Use mindfully.
+	 *
+	 * @param predicate The predicate to check against.
+	 * @return 'true' if any of the messages contain 'predicate'; 'false' otherwise.
+	 */
+	public boolean containsPredicate(String predicate);
+
 	/**
 	 * 
 	 * @param messageId message to be retrieved.
