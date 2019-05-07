@@ -50,7 +50,7 @@ public class DynoShardSupplier implements ShardSupplier {
 	
 	@Override
 	public String getCurrentShard() {
-		return localRack;
+		return localRack.replaceAll(region, "");
 	}
 	
 	@Override
