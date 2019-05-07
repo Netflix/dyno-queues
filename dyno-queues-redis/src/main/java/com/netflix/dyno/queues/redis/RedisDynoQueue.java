@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Uninterruptibles;
+import com.netflix.dyno.jedis.DynoJedisClient;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
 import com.netflix.dyno.queues.redis.sharding.ShardingStrategy;
@@ -468,8 +469,8 @@ public class RedisDynoQueue implements DynoQueue {
                     "end\n" +
                     "return 0";
 
-            // Cast from 'JedisCommands' to 'Jedis' here since the former does not expose 'eval()'.
-            int retval = (int) ((Jedis)quorumConn).eval(predicateCheckLuaScript,
+            // Cast from 'JedisCommands' to 'DynoJedisClient' here since the former does not expose 'eval()'.
+            int retval = (int) ((DynoJedisClient)quorumConn).eval(predicateCheckLuaScript,
                     Collections.singletonList(messageStoreKey), Collections.singletonList(predicate));
 
             return (retval == 1);
