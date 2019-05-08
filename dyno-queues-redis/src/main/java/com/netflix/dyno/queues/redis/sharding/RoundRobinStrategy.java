@@ -37,7 +37,6 @@ public class RoundRobinStrategy implements ShardingStrategy {
             nextShardIndex.set(0);
             index = 0;
         }
-        String shard = allShards.get(index);
-        return shard;
+        return allShards.get(index);
     }
 }
