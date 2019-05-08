@@ -470,7 +470,7 @@ public class RedisDynoQueue implements DynoQueue {
                     "return 0";
 
             // Cast from 'JedisCommands' to 'DynoJedisClient' here since the former does not expose 'eval()'.
-            int retval = (int) ((DynoJedisClient)quorumConn).eval(predicateCheckLuaScript,
+            Long retval = (Long) ((DynoJedisClient)quorumConn).eval(predicateCheckLuaScript,
                     Collections.singletonList(messageStoreKey), Collections.singletonList(predicate));
 
             return (retval == 1);
