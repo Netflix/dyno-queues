@@ -32,12 +32,7 @@ import redis.clients.jedis.params.ZAddParams;
 
 import java.io.IOException;
 import java.time.Clock;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -69,7 +64,7 @@ public class RedisDynoQueue implements DynoQueue {
 
     private final String messageStoreKey;
 
-    private final String myQueueShard;
+    private final String localQueueShard;
 
     private volatile int unackTime = 60;
 
@@ -83,11 +78,22 @@ public class RedisDynoQueue implements DynoQueue {
 
     private final ConcurrentLinkedQueue<String> prefetchedIds;
 
+    private final Map<String, ConcurrentLinkedQueue<String>> unsafePrefetchedIdsAllShardsMap;
+
     private final ScheduledExecutorService schedulerForUnacksProcessing;
 
     private final int retryCount = 2;
 
     private final ShardingStrategy shardingStrategy;
+
+    // Tracks the number of message IDs to prefetch based on the message counts requested by the caller via pop().
+    @VisibleForTesting
+    AtomicInteger numIdsToPrefetch;
+
+    // Tracks the number of message IDs to prefetch based on the message counts requested by the caller via
+    // unsafePopAllShards().
+    @VisibleForTesting
+    AtomicInteger unsafeNumIdsToPrefetchAllShards;
 
     public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, ShardingStrategy shardingStrategy) {
         this(redisKeyPrefix, queueName, allShards, shardName, 60_000, shardingStrategy);
@@ -104,13 +110,19 @@ public class RedisDynoQueue implements DynoQueue {
         this.allShards = ImmutableList.copyOf(allShards.stream().collect(Collectors.toList()));
         this.shardName = shardName;
         this.messageStoreKey = redisKeyPrefix + ".MESSAGE." + queueName;
-        this.myQueueShard = getQueueShardKey(queueName, shardName);
+        this.localQueueShard = getQueueShardKey(queueName, shardName);
         this.shardingStrategy = shardingStrategy;
 
+        this.numIdsToPrefetch = new AtomicInteger(0);
+        this.unsafeNumIdsToPrefetchAllShards = new AtomicInteger(0);
 
         this.om = QueueUtils.constructObjectMapper();
         this.monitor = new QueueMonitor(queueName, shardName);
         this.prefetchedIds = new ConcurrentLinkedQueue<>();
+        this.unsafePrefetchedIdsAllShardsMap = new HashMap<>();
+        for (String shard : allShards) {
+            unsafePrefetchedIdsAllShardsMap.put(getQueueShardKey(queueName, shard), new ConcurrentLinkedQueue<>());
+        }
 
         schedulerForUnacksProcessing = Executors.newScheduledThreadPool(1);
 
@@ -132,6 +144,17 @@ public class RedisDynoQueue implements DynoQueue {
     public RedisDynoQueue withUnackTime(int unackTime) {
         this.unackTime = unackTime;
         return this;
+    }
+
+    /**
+     * @return Number of items in each ConcurrentLinkedQueue from 'unsafePrefetchedIdsAllShardsMap'.
+     */
+    private int unsafeGetNumPrefetchedIds() {
+        // Note: We use an AtomicInteger due to Java's limitation of not allowing the modification of local native
+        // data types in lambdas (Java 8).
+        AtomicInteger totalSize = new AtomicInteger(0);
+        unsafePrefetchedIdsAllShardsMap.forEach((k,v)->totalSize.addAndGet(v.size()));
+        return totalSize.get();
     }
 
     @Override
@@ -181,22 +204,111 @@ public class RedisDynoQueue implements DynoQueue {
             if (ids == null) {
                 return Collections.emptyList();
             }
-
-            List<Message> msgs = execute("peek", messageStoreKey, () -> {
-                List<Message> messages = new LinkedList<Message>();
-                for (String id : ids) {
-                    String json = nonQuorumConn.hget(messageStoreKey, id);
-                    Message message = om.readValue(json, Message.class);
-                    messages.add(message);
-                }
-                return messages;
-            });
-
-            return msgs;
+            return doPeekBodyHelper(ids);
 
         } finally {
             sw.stop();
         }
+    }
+
+    @Override
+    public List<Message> unsafePeekAllShards(final int messageCount) {
+
+        Stopwatch sw = monitor.peek.start();
+
+        try {
+
+            Set<String> ids = peekIdsAllShards(0, messageCount);
+            if (ids == null) {
+                return Collections.emptyList();
+            }
+            return doPeekBodyHelper(ids);
+        } finally {
+            sw.stop();
+        }
+    }
+
+    /**
+     *
+     * Peeks into 'this.localQueueShard' and returns up to 'count' items starting at position 'offset' in the shard.
+     *
+     *
+     * @param offset Number of items to skip over in 'this.localQueueShard'
+     * @param count Number of items to return.
+     * @return Up to 'count' number of message IDs in a set.
+     */
+    private Set<String> peekIds(final int offset, final int count, final double peekTillTs) {
+
+        return execute("peekIds", localQueueShard, () -> {
+            double peekTillTsOrNow = (peekTillTs == 0.0) ? Long.valueOf(clock.millis() + 1).doubleValue() : peekTillTs;
+            return doPeekIdsFromShardHelper(localQueueShard, peekTillTsOrNow, offset, count);
+        });
+
+    }
+
+    private Set<String> peekIds(final int offset, final int count) {
+        return peekIds(offset, count, 0.0);
+    }
+
+    /**
+     *
+     * Same as 'peekIds()' but looks into all shards of the queue ('this.allShards').
+     *
+     * @param count Number of items to return.
+     * @return Up to 'count' number of message IDs in a set.
+     */
+    private Set<String> peekIdsAllShards(final int offset, final int count) {
+        return execute("peekIdsAllShards", localQueueShard, () -> {
+            Set<String> scanned = new HashSet<>();
+            double now = Long.valueOf(clock.millis() + 1).doubleValue();
+            int remaining_count = count;
+
+            // Try to get as many items from 'this.localQueueShard' first to reduce chances of returning duplicate items.
+            // (See unsafe* functions disclaimer in DynoQueue.java)
+            scanned.addAll(peekIds(offset, count, now));
+            remaining_count -= scanned.size();
+
+            for (String shard : allShards) {
+                String queueShardName = getQueueShardKey(queueName, shard);
+                // Skip 'localQueueShard'.
+                if (queueShardName.equals(localQueueShard)) continue;
+
+                Set<String> elems = doPeekIdsFromShardHelper(queueShardName, now, offset, count);
+                scanned.addAll(elems);
+                remaining_count -= elems.size();
+                if (remaining_count <= 0) break;
+            }
+
+            return scanned;
+
+        });
+    }
+
+    private Set<String> doPeekIdsFromShardHelper(final String queueShardName, final double peekTillTs, final int offset,
+                                          final int count) {
+        return nonQuorumConn.zrangeByScore(queueShardName, 0, peekTillTs, offset, count);
+    }
+
+    /**
+     * Takes a set of message IDs, 'message_ids', and returns a list of Message objects
+     * corresponding to 'message_ids'. Read only, does not make any updates.
+     *
+     * @param message_ids Set of message IDs to peek.
+     * @return a list of Message objects corresponding to 'message_ids'
+     *
+     */
+    private List<Message> doPeekBodyHelper(Set<String> message_ids) {
+        List<Message> msgs = execute("peek", messageStoreKey, () -> {
+            List<Message> messages = new LinkedList<Message>();
+            for (String id : message_ids) {
+                String json = nonQuorumConn.hget(messageStoreKey, id);
+                Message message = om.readValue(json, Message.class);
+                messages.add(message);
+            }
+            return messages;
+        });
+
+        return msgs;
     }
 
     @Override
@@ -210,13 +322,21 @@ public class RedisDynoQueue implements DynoQueue {
         try {
             long start = clock.millis();
             long waitFor = unit.toMillis(wait);
-            prefetch.addAndGet(messageCount);
+            numIdsToPrefetch.addAndGet(messageCount);
+
+            // We prefetch message IDs here first before attempting to pop them off the sorted set.
+            // The reason we do this (as opposed to just popping from the head of the sorted set),
+            // is that due to the eventually consistent nature of Dynomite, the different replicas of the same
+            // sorted set _may_ not look exactly the same at any given time, i.e. they may have a different number of
+            // items due to replication lag.
+            // So, we first peek into the sorted set to find the list of message IDs that we know for sure are
+            // replicated across all replicas and then attempt to pop them based on those message IDs.
             prefetchIds();
             while (prefetchedIds.size() < messageCount && ((clock.millis() - start) < waitFor)) {
                 Uninterruptibles.sleepUninterruptibly(200, TimeUnit.MILLISECONDS);
                 prefetchIds();
             }
-            return _pop(messageCount);
+            return _pop(shardName, messageCount, prefetchedIds);
 
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -229,14 +349,14 @@ public class RedisDynoQueue implements DynoQueue {
     @Override
     public Message popWithMsgId(String messageId) {
 
-        return execute("popWithMsgId", myQueueShard, () -> {
+        return execute("popWithMsgId", localQueueShard, () -> {
             double unackScore = Long.valueOf(clock.millis() + unackTime).doubleValue();
-            String unackQueueName = getUnackKey(queueName, shardName);
+            String unackShardName = getUnackKey(queueName, shardName);
 
             ZAddParams zParams = ZAddParams.zAddParams().nx();
 
             try {
-                long exists = nonQuorumConn.zrank(myQueueShard, messageId);
+                long exists = nonQuorumConn.zrank(localQueueShard, messageId);
                 // If an exception wasn't thrown, the element has to exist.
                 assert(exists >= 0);
             } catch (NullPointerException e) {
@@ -257,16 +377,16 @@ public class RedisDynoQueue implements DynoQueue {
                 return null;
             }
 
-            long added = quorumConn.zadd(unackQueueName, unackScore, messageId, zParams);
+            long added = quorumConn.zadd(unackShardName, unackScore, messageId, zParams);
             if (added == 0) {
                 if (logger.isDebugEnabled()) {
-                    logger.debug("cannot add {} to the unack shard {}", messageId, unackQueueName);
+                    logger.debug("cannot add {} to the unack shard {}", messageId, unackShardName);
                 }
                 monitor.misses.increment();
                 return null;
             }
 
-            long removed = quorumConn.zrem(myQueueShard, messageId);
+            long removed = quorumConn.zrem(localQueueShard, messageId);
             if (removed == 0) {
                 if (logger.isDebugEnabled()) {
                     logger.debug("cannot remove {} from the queue shard ", queueName, messageId);
@@ -281,58 +401,146 @@ public class RedisDynoQueue implements DynoQueue {
 
     }
 
-    @VisibleForTesting
-    AtomicInteger prefetch = new AtomicInteger(0);
-
-    private void prefetchIds() {
-
-        if (prefetch.get() < 1) {
-            return;
+    public List<Message> unsafePopAllShards(int messageCount, int wait, TimeUnit unit) {
+        if (messageCount < 1) {
+            return Collections.emptyList();
         }
 
-        int prefetchCount = prefetch.get();
-        Stopwatch sw = monitor.start(monitor.prefetch, prefetchCount);
+        Stopwatch sw = monitor.start(monitor.pop, messageCount);
         try {
+            long start = clock.millis();
+            long waitFor = unit.toMillis(wait);
+            unsafeNumIdsToPrefetchAllShards.addAndGet(messageCount);
 
-            Set<String> ids = peekIds(0, prefetchCount);
-            prefetchedIds.addAll(ids);
-            prefetch.addAndGet((-1 * ids.size()));
-            if (prefetch.get() < 0 || ids.isEmpty()) {
-                prefetch.set(0);
+            prefetchIdsAllShards();
+            while(unsafeGetNumPrefetchedIds() < messageCount && ((clock.millis() - start) < waitFor)) {
+                Uninterruptibles.sleepUninterruptibly(200, TimeUnit.MILLISECONDS);
+                prefetchIdsAllShards();
+            }
+
+            int remainingCount = messageCount;
+            // Pop as much as possible from the local shard first to reduce chances of returning duplicate items.
+            // (See unsafe* functions disclaimer in DynoQueue.java)
+            List<Message> popped = _pop(shardName, remainingCount, prefetchedIds);
+            remainingCount -= popped.size();
+
+            for (String shard : allShards) {
+                String queueShardName = getQueueShardKey(queueName, shard);
+                List<Message> elems = _pop(shard, remainingCount, unsafePrefetchedIdsAllShardsMap.get(queueShardName));
+                popped.addAll(elems);
+                remainingCount -= elems.size();
+            }
+            return popped;
+        } catch(Exception e) {
+            throw new RuntimeException(e);
+        } finally {
+            sw.stop();
+        }
+    }
+
+    /**
+     * Prefetch message IDs from the local shard.
+     */
+    private void prefetchIds() {
+        double now = Long.valueOf(clock.millis() + 1).doubleValue();
+        int numPrefetched = doPrefetchIdsHelper(localQueueShard, numIdsToPrefetch, prefetchedIds, now);
+        if (numPrefetched == 0) {
+            numIdsToPrefetch.set(0);
+        }
+    }
+
+
+    /**
+     * Prefetch message IDs from all shards.
+     */
+    private void prefetchIdsAllShards() {
+        double now = Long.valueOf(clock.millis() + 1).doubleValue();
+
+        // Try to prefetch as many items from 'this.localQueueShard' first to reduce chances of returning duplicate items.
+        // (See unsafe* functions disclaimer in DynoQueue.java)
+        doPrefetchIdsHelper(localQueueShard, unsafeNumIdsToPrefetchAllShards,
+                unsafePrefetchedIdsAllShardsMap.get(localQueueShard), now);
+
+        if (unsafeNumIdsToPrefetchAllShards.get() < 1) return;
+
+        for (String shard : allShards) {
+            String queueShardName = getQueueShardKey(queueName, shard);
+            if (queueShardName.equals(localQueueShard)) continue; // Skip since we've already serviced the local shard.
+
+            doPrefetchIdsHelper(queueShardName, unsafeNumIdsToPrefetchAllShards,
+                    unsafePrefetchedIdsAllShardsMap.get(queueShardName), now);
+        }
+    }
+
+    /**
+     * Attempts to prefetch up to 'prefetchCounter' message IDs, by peeking into a queue based on 'peekFunction',
+     * and store it in a concurrent linked queue.
+     *
+     * @param prefetchCounter Number of message IDs to attempt prefetch.
+     * @param prefetchedIdQueue Concurrent Linked Queue where message IDs are stored.
+     * @param peekFunction Function to call to peek into the queue.
+     */
+    private int doPrefetchIdsHelper(String queueShardName, AtomicInteger prefetchCounter,
+                                     ConcurrentLinkedQueue<String> prefetchedIdQueue, double prefetchFromTs) {
+
+        if (prefetchCounter.get() < 1) {
+            return 0;
+        }
+
+        int numSuccessfullyPrefetched = 0;
+        int numToPrefetch = prefetchCounter.get();
+        Stopwatch sw = monitor.start(monitor.prefetch, numToPrefetch);
+        try {
+            // Attempt to peek up to 'numToPrefetch' message Ids.
+            Set<String> ids = doPeekIdsFromShardHelper(queueShardName, prefetchFromTs, 0, numToPrefetch);
+
+            // Store prefetched IDs in a queue.
+            prefetchedIdQueue.addAll(ids);
+
+            numSuccessfullyPrefetched = ids.size();
+
+            // Account for number of IDs successfully prefetched.
+            prefetchCounter.addAndGet((-1 * ids.size()));
+            if(prefetchCounter.get() < 0) {
+                prefetchCounter.set(0);
             }
         } finally {
             sw.stop();
         }
-
+        return numSuccessfullyPrefetched;
     }
 
-    private List<Message> _pop(int messageCount) throws Exception {
+    private List<Message> _pop(String shard, int messageCount,
+                               ConcurrentLinkedQueue<String> prefetchedIdQueue) throws Exception {
 
+        String queueShardName = getQueueShardKey(queueName, shard);
+        String unackShardName = getUnackKey(queueName, shard);
         double unackScore = Long.valueOf(clock.millis() + unackTime).doubleValue();
-        String unackQueueName = getUnackKey(queueName, shardName);
 
-        List<Message> popped = new LinkedList<>();
+        // NX option indicates add only if it doesn't exist.
+        // https://redis.io/commands/zadd#zadd-options-redis-302-or-greater
         ZAddParams zParams = ZAddParams.zAddParams().nx();
 
-        for (; popped.size() != messageCount; ) {
-            String msgId = prefetchedIds.poll();
-            if (msgId == null) {
+        List<Message> popped = new LinkedList<>();
+        for (;popped.size() != messageCount;) {
+            String msgId = prefetchedIdQueue.poll();
+            if(msgId == null) {
                 break;
             }
 
-            long added = quorumConn.zadd(unackQueueName, unackScore, msgId, zParams);
-            if (added == 0) {
+            long added = quorumConn.zadd(unackShardName, unackScore, msgId, zParams);
+            if(added == 0){
                 if (logger.isDebugEnabled()) {
-                    logger.debug("cannot add {} to the unack shard {}", msgId, unackQueueName);
+                    logger.debug("cannot add {} to the unack shard {}", msgId, unackShardName);
                 }
                 monitor.misses.increment();
                 continue;
             }
 
-            long removed = quorumConn.zrem(myQueueShard, msgId);
+            long removed = quorumConn.zrem(queueShardName, msgId);
             if (removed == 0) {
                 if (logger.isDebugEnabled()) {
-                    logger.debug("cannot remove {} from the queue shard ", queueName, msgId);
+                    logger.debug("cannot remove {} from the queue shard {}", msgId, queueShardName);
                 }
                 monitor.misses.increment();
                 continue;
@@ -624,16 +832,6 @@ public class RedisDynoQueue implements DynoQueue {
 
     }
 
-    private Set<String> peekIds(int offset, int count) {
-
-        return execute("peekIds", myQueueShard, () -> {
-            double now = Long.valueOf(clock.millis() + 1).doubleValue();
-            Set<String> scanned = nonQuorumConn.zrangeByScore(myQueueShard, 0, now, offset, count);
-            return scanned;
-        });
-
-    }
-
     @Override
     public void processUnacks() {
 
@@ -647,16 +845,16 @@ public class RedisDynoQueue implements DynoQueue {
             execute("processUnacks", keyName, () -> {
 
                 int batchSize = 1_000;
-                String unackQueueName = getUnackKey(queueName, shardName);
+                String unackShardName = getUnackKey(queueName, shardName);
 
                 double now = Long.valueOf(clock.millis()).doubleValue();
                 int num_moved_back = 0;
                 int num_stale = 0;
 
-                Set<Tuple> unacks = nonQuorumConn.zrangeByScoreWithScores(unackQueueName, 0, now, 0, batchSize);
+                Set<Tuple> unacks = nonQuorumConn.zrangeByScoreWithScores(unackShardName, 0, now, 0, batchSize);
 
                 if (unacks.size() > 0) {
-                    logger.info("processUnacks: Adding " + unacks.size() + " messages back to shard of queue: " + unackQueueName);
+                    logger.info("processUnacks: Adding " + unacks.size() + " messages back to shard of queue: " + unackShardName);
                 }
 
                 for (Tuple unack : unacks) {
@@ -666,13 +864,13 @@ public class RedisDynoQueue implements DynoQueue {
 
                     String payload = quorumConn.hget(messageStoreKey, member);
                     if (payload == null) {
-                        quorumConn.zrem(unackQueueName, member);
+                        quorumConn.zrem(unackShardName, member);
                         ++num_stale;
                         continue;
                     }
 
-                    long added_back = quorumConn.zadd(myQueueShard, score, member);
-                    long removed_from_unack = quorumConn.zrem(unackQueueName, member);
+                    long added_back = quorumConn.zadd(localQueueShard, score, member);
+                    long removed_from_unack = quorumConn.zrem(unackShardName, member);
                     if (added_back > 0 && removed_from_unack > 0) ++num_moved_back;
                 }
 

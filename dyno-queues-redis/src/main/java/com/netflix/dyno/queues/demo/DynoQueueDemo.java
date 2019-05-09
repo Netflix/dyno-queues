@@ -10,11 +10,11 @@ import com.netflix.dyno.queues.shard.DynoShardSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
 import java.io.IOException;
-import java.io.InputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
 public class DynoQueueDemo extends DynoJedisDemo {
@@ -92,6 +92,7 @@ public class DynoQueueDemo extends DynoJedisDemo {
         payloads.add(new Message("id7", "payload 7"));
         payloads.add(new Message("id8", "payload 8"));
         payloads.add(new Message("id9", "payload 9"));
+
         DynoQueue V1Queue = queues.get("simpleQueue");
 
         // Clear the queue in case the server already has the above key.
@@ -125,12 +126,26 @@ public class DynoQueueDemo extends DynoJedisDemo {
         assert(ack_successful);
 
         // Test remove()
+        // Note: This checks for "id9" specifically as it implicitly expects every 3rd element we push to be in our
+        // local shard.
         boolean removed = V1Queue.remove("id9");
         assert(removed);
 
         // Test pop(). Even though we try to pop 3 messages, there will only be one remaining message in our local shard.
         List<Message> popped_msgs = V1Queue.pop(3, 1000, TimeUnit.MILLISECONDS);
         V1Queue.ack(popped_msgs.get(0).getId());
+
+        // Test unsafePeekAllShards()
+        List<Message> peek_all_msgs = V1Queue.unsafePeekAllShards(5);
+        for (Message msg : peek_all_msgs) {
+            logger.info("Message peeked (ID : payload) -> " + msg.getId() + " : " + msg.getPayload());
+        }
+
+        // Test unsafePopAllShards()
+        List<Message> pop_all_msgs = V1Queue.unsafePopAllShards(2, 1000, TimeUnit.MILLISECONDS);
+        for (Message msg : pop_all_msgs) {
+            logger.info("Message popped (ID : payload) -> " + msg.getId() + " : " + msg.getPayload());
+        }
 
         V1Queue.clear();
         V1Queue.close();

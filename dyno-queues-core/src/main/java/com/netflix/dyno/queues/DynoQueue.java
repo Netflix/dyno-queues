@@ -21,6 +21,7 @@ package com.netflix.dyno.queues;
 import java.io.Closeable;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -54,7 +55,8 @@ public interface DynoQueue extends Closeable {
      * @param messageCount number of messages to be popped out of the queue.
      * @param wait Amount of time to wait if there are no messages in queue
      * @param unit Time unit for the wait period
-     * @return messages.  Can be less than the messageCount if there are fewer messages available than the message count.  If the popped messages are not acknowledge in a timely manner, they are pushed back into the queue.
+     * @return messages.  Can be less than the messageCount if there are fewer messages available than the message count.
+	 *                    If the popped messages are not acknowledge in a timely manner, they are pushed back into the queue.
      * @see #peek(int)
      * @see #ack(String)
      * @see #getUnackTime()
@@ -73,6 +75,9 @@ public interface DynoQueue extends Closeable {
 
     /**
      * Provides a peek into the queue without taking messages out.
+	 *
+	 * Note: This peeks only into the 'local' shard.
+	 *
      * @param messageCount number of messages to be peeked.
      * @return List of peeked messages.
      * @see #pop(int, int, TimeUnit)
@@ -185,4 +190,47 @@ public interface DynoQueue extends Closeable {
      * Process un-acknowledged messages.  The messages which are polled by the client but not ack'ed are moved back to queue
      */
     public void processUnacks();
+
+	/*
+	 * <=== Begin unsafe* functions. ===>
+	 *
+	 *     The unsafe functions listed below are not advisable to use.
+	 *     The reason they are listed as unsafe is that they operate over all shards of a queue which means that
+	 *     due to the eventually consistent nature of Dynomite, the calling application may see duplicate item(s) that
+	 *     may have already been popped in a different rack, by another instance of the same application.
+	 *
+	 *     Why are these functions made available then?
+	 *     There are some users of dyno-queues who have use-cases that are completely okay with dealing with duplicate
+	 *     items.
+	 */
+
+	/**
+	 * Provides a peek into all shards of the queue without taking messages out.
+	 * Note: The local shard will always be looked into first and other shards will be filled behind it (if 'messageCount' is
+	 * greater than the number of elements in the local shard). This way we ensure the chances of duplicates are less.
+	 *
+	 * @param count The number of messages to peek.
+	 * @return A list of up to 'count' messages.
+	 */
+	public List<Message> unsafePeekAllShards(final int messageCount);
+
+
+	/**
+	 * Allows popping from all shards of the queue.
+	 *
+	 * Note: The local shard will always be looked into first and other shards will be filled behind it (if 'messageCount' is
+	 * greater than the number of elements in the local shard). This way we ensure the chances of duplicates are less.
+	 *
+	 * @param messageCount number of messages to be popped out of the queue.
+	 * @param wait Amount of time to wait for each shard if there are no messages in shard.
+	 * @param unit Time unit for the wait period
+	 * @return messages. Can be less than the messageCount if there are fewer messages available than the message count.
+	 * 					 If the popped messages are not acknowledge in a timely manner, they are pushed back into
+	 * 					 the queue.
+	 * @see #peek(int)
+	 * @see #ack(String)
+	 * @see #getUnackTime()
+	 *
+	 */
+	public List<Message> unsafePopAllShards(int messageCount, int wait, TimeUnit unit);
 }
