@@ -648,4 +648,14 @@ public class RedisPipelineQueue implements DynoQueue {
         schedulerForUnacksProcessing.shutdown();
         monitor.close();
     }
+
+    @Override
+    public List<Message> unsafePeekAllShards(final int messageCount) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public List<Message> unsafePopAllShards(int messageCount, int wait, TimeUnit unit) {
+        throw new UnsupportedOperationException();
+    }
 }
