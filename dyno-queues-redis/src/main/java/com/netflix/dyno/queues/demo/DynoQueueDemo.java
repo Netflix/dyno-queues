@@ -3,16 +3,15 @@ package com.netflix.dyno.queues.demo;
 import com.google.common.collect.ImmutableList;
 import com.netflix.dyno.demo.redis.DynoJedisDemo;
 import com.netflix.dyno.jedis.DynoJedisClient;
-import com.netflix.dyno.queues.redis.RedisQueues;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
+import com.netflix.dyno.queues.redis.RedisQueues;
 import com.netflix.dyno.queues.redis.v2.QueueBuilder;
 import com.netflix.dyno.queues.shard.DynoShardSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.sql.Time;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
@@ -35,7 +34,7 @@ public class DynoQueueDemo extends DynoJedisDemo {
      * if the cluster is not reachable.
      *
      * @param args:
-     * <cluster-name> <version>
+     * cluster-name version
      *
      * cluster-name: Name of cluster to run demo against
      * version: Possible values = 1 or 2; (for V1 or V2)
