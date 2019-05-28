@@ -148,7 +148,9 @@ public class MultiRedisQueue implements DynoQueue {
     }
 
     @Override
-    public boolean containsPredicate(String predicate) { throw new UnsupportedOperationException(); }
+    public boolean containsPredicate(String predicate) {
+        throw new UnsupportedOperationException();
+    }
 
     @Override
     public Message get(String messageId) {

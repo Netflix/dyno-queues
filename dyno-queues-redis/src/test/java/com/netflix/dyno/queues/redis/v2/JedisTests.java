@@ -62,7 +62,7 @@ public class JedisTests extends BaseQueueTests {
         QueueBuilder qb = new QueueBuilder();
         DynoQueue queue = qb
                 .setCurrentShard("a")
-                .setHostToShardMap((Host h) -> h.getRack().substring(h.getRack().length()-1))
+                .setHostToShardMap((Host h) -> h.getRack().substring(h.getRack().length() - 1))
                 .setQueueName(queueName)
                 .setRedisKeyPrefix(redisKeyPrefix)
                 .setUnackTime(1_000)
@@ -74,7 +74,6 @@ public class JedisTests extends BaseQueueTests {
         return queue;
 
     }
-
 
 
 }

@@ -1,12 +1,12 @@
 /**
  * Copyright 2016 Netflix, Inc.
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 /**
- * 
+ *
  */
 package com.netflix.dyno.queues.redis;
 
@@ -41,26 +41,26 @@ import com.netflix.dyno.connectionpool.HostSupplier;
  */
 public class DynoShardSupplierTest {
 
-	@Test
-	public void test(){
-		HostSupplier hs = new HostSupplier() {
-			@Override
-			public List<Host> getHosts() {
-				List<Host> hosts = new LinkedList<>();
-				hosts.add(new Host("host1", 8102, "us-east-1a", Status.Up));
-				hosts.add(new Host("host1", 8102, "us-east-1b", Status.Up));
-				hosts.add(new Host("host1", 8102, "us-east-1d", Status.Up));
-				
-				return hosts;
-			}
-		};
-		DynoShardSupplier supplier = new DynoShardSupplier(hs, "us-east-1", "a");
-		String localShard = supplier.getCurrentShard();
-		Set<String> allShards = supplier.getQueueShards();
-		
-		assertNotNull(localShard);
-		assertEquals("a", localShard);
-		assertNotNull(allShards);
-		assertEquals(Arrays.asList("a","b","d").stream().collect(Collectors.toSet()), allShards);		
-	}
+    @Test
+    public void test() {
+        HostSupplier hs = new HostSupplier() {
+            @Override
+            public List<Host> getHosts() {
+                List<Host> hosts = new LinkedList<>();
+                hosts.add(new Host("host1", 8102, "us-east-1a", Status.Up));
+                hosts.add(new Host("host1", 8102, "us-east-1b", Status.Up));
+                hosts.add(new Host("host1", 8102, "us-east-1d", Status.Up));
+
+                return hosts;
+            }
+        };
+        DynoShardSupplier supplier = new DynoShardSupplier(hs, "us-east-1", "a");
+        String localShard = supplier.getCurrentShard();
+        Set<String> allShards = supplier.getQueueShards();
+
+        assertNotNull(localShard);
+        assertEquals("a", localShard);
+        assertNotNull(allShards);
+        assertEquals(Arrays.asList("a", "b", "d").stream().collect(Collectors.toSet()), allShards);
+    }
 }

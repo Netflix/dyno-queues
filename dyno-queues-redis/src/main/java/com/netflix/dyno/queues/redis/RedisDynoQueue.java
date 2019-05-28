@@ -1,12 +1,12 @@
 /**
  * Copyright 2016 Netflix, Inc.
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -120,17 +120,17 @@ public class RedisDynoQueue implements DynoQueue {
         logger.info(RedisDynoQueue.class.getName() + " is ready to serve " + queueName);
     }
 
-    public RedisDynoQueue withQuorumConn(JedisCommands quorumConn){
+    public RedisDynoQueue withQuorumConn(JedisCommands quorumConn) {
         this.quorumConn = quorumConn;
         return this;
     }
 
-    public RedisDynoQueue withNonQuorumConn(JedisCommands nonQuorumConn){
+    public RedisDynoQueue withNonQuorumConn(JedisCommands nonQuorumConn) {
         this.nonQuorumConn = nonQuorumConn;
         return this;
     }
 
-    public RedisDynoQueue withUnackTime(int unackTime){
+    public RedisDynoQueue withUnackTime(int unackTime) {
         this.unackTime = unackTime;
         return this;
     }
@@ -213,13 +213,13 @@ public class RedisDynoQueue implements DynoQueue {
             long waitFor = unit.toMillis(wait);
             prefetch.addAndGet(messageCount);
             prefetchIds();
-            while(prefetchedIds.size() < messageCount && ((clock.millis() - start) < waitFor)) {
+            while (prefetchedIds.size() < messageCount && ((clock.millis() - start) < waitFor)) {
                 Uninterruptibles.sleepUninterruptibly(200, TimeUnit.MILLISECONDS);
                 prefetchIds();
             }
             return _pop(messageCount);
 
-        } catch(Exception e) {
+        } catch (Exception e) {
             throw new RuntimeException(e);
         } finally {
             sw.stop();
@@ -243,7 +243,7 @@ public class RedisDynoQueue implements DynoQueue {
             Set<String> ids = peekIds(0, prefetchCount);
             prefetchedIds.addAll(ids);
             prefetch.addAndGet((-1 * ids.size()));
-            if(prefetch.get() < 0 || ids.isEmpty()) {
+            if (prefetch.get() < 0 || ids.isEmpty()) {
                 prefetch.set(0);
             }
         } finally {
@@ -260,14 +260,14 @@ public class RedisDynoQueue implements DynoQueue {
         List<Message> popped = new LinkedList<>();
         ZAddParams zParams = ZAddParams.zAddParams().nx();
 
-        for (;popped.size() != messageCount;) {
+        for (; popped.size() != messageCount; ) {
             String msgId = prefetchedIds.poll();
-            if(msgId == null) {
+            if (msgId == null) {
                 break;
             }
 
             long added = quorumConn.zadd(unackQueueName, unackScore, msgId, zParams);
-            if(added == 0){
+            if (added == 0) {
                 if (logger.isDebugEnabled()) {
                     logger.debug("cannot add {} to the unack shard ", queueName, msgId);
                 }
@@ -285,7 +285,7 @@ public class RedisDynoQueue implements DynoQueue {
             }
 
             String json = quorumConn.hget(messageStoreKey, msgId);
-            if(json == null){
+            if (json == null) {
                 if (logger.isDebugEnabled()) {
                     logger.debug("Cannot get the message payload for {}", msgId);
                 }
@@ -328,7 +328,7 @@ public class RedisDynoQueue implements DynoQueue {
 
     @Override
     public void ack(List<Message> messages) {
-        for(Message message : messages) {
+        for (Message message : messages) {
             ack(message.getId());
         }
     }
@@ -345,7 +345,7 @@ public class RedisDynoQueue implements DynoQueue {
 
                     String unackShardKey = getUnackKey(queueName, shard);
                     Double score = quorumConn.zscore(unackShardKey, messageId);
-                    if(score != null) {
+                    if (score != null) {
                         quorumConn.zadd(unackShardKey, unackScore, messageId);
                         return true;
                     }
@@ -364,7 +364,7 @@ public class RedisDynoQueue implements DynoQueue {
         return execute("setTimeout", "(a shard in) " + queueName, () -> {
 
             String json = nonQuorumConn.hget(messageStoreKey, messageId);
-            if(json == null) {
+            if (json == null) {
                 return false;
             }
             Message message = om.readValue(json, Message.class);
@@ -374,7 +374,7 @@ public class RedisDynoQueue implements DynoQueue {
 
                 String queueShard = getQueueShardKey(queueName, shard);
                 Double score = quorumConn.zscore(queueShard, messageId);
-                if(score != null) {
+                if (score != null) {
                     double priorityd = message.getPriority() / 100;
                     double newScore = Long.valueOf(clock.millis() + timeout).doubleValue() + priorityd;
                     ZAddParams params = ZAddParams.zAddParams().xx();
@@ -422,25 +422,25 @@ public class RedisDynoQueue implements DynoQueue {
 
     @Override
     public boolean ensure(Message message) {
-      return execute("ensure", "(a shard in) " + queueName, () -> {
+        return execute("ensure", "(a shard in) " + queueName, () -> {
 
-        String messageId = message.getId();
-        for (String shard : allShards) {
+            String messageId = message.getId();
+            for (String shard : allShards) {
 
-          String queueShard = getQueueShardKey(queueName, shard);
-          Double score = quorumConn.zscore(queueShard, messageId);
-          if(score != null) {
-            return false;
-          }
-          String unackShardKey = getUnackKey(queueName, shard);
-          score = quorumConn.zscore(unackShardKey, messageId);
-          if(score != null) {
-            return false;
-          }
-        }
-        push(Collections.singletonList(message));
-        return true;
-      });
+                String queueShard = getQueueShardKey(queueName, shard);
+                Double score = quorumConn.zscore(queueShard, messageId);
+                if (score != null) {
+                    return false;
+                }
+                String unackShardKey = getUnackKey(queueName, shard);
+                score = quorumConn.zscore(unackShardKey, messageId);
+                if (score != null) {
+                    return false;
+                }
+            }
+            push(Collections.singletonList(message));
+            return true;
+        });
     }
 
     @Override
@@ -470,7 +470,7 @@ public class RedisDynoQueue implements DynoQueue {
                     "return 0";
 
             // Cast from 'JedisCommands' to 'DynoJedisClient' here since the former does not expose 'eval()'.
-            Long retval = (Long) ((DynoJedisClient)quorumConn).eval(predicateCheckLuaScript,
+            Long retval = (Long) ((DynoJedisClient) quorumConn).eval(predicateCheckLuaScript,
                     Collections.singletonList(messageStoreKey), Collections.singletonList(predicate));
 
             return (retval == 1);
@@ -486,7 +486,7 @@ public class RedisDynoQueue implements DynoQueue {
 
             return execute("get", messageStoreKey, () -> {
                 String json = quorumConn.hget(messageStoreKey, messageId);
-                if(json == null){
+                if (json == null) {
                     if (logger.isDebugEnabled()) {
                         logger.debug("Cannot get the message payload " + messageId);
                     }

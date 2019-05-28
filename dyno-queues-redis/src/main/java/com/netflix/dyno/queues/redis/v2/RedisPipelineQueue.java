@@ -224,7 +224,7 @@ public class RedisPipelineQueue implements DynoQueue {
                 }
                 messages.addAll(popped);
                 remaining -= poppedCount;
-                if(clock.millis() > time) {
+                if (clock.millis() > time) {
                     break;
                 }
 
@@ -464,7 +464,9 @@ public class RedisPipelineQueue implements DynoQueue {
     }
 
     @Override
-    public boolean containsPredicate(String predicate) { throw new UnsupportedOperationException(); }
+    public boolean containsPredicate(String predicate) {
+        throw new UnsupportedOperationException();
+    }
 
     @Override
     public Message get(String messageId) {
