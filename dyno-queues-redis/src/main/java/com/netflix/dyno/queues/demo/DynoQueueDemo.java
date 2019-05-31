@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 public class DynoQueueDemo extends DynoJedisDemo {
 
     private static final Logger logger = LoggerFactory.getLogger(DynoQueue.class);
+
     public DynoQueueDemo(String clusterName, String localRack) {
         super(clusterName, localRack);
     }
@@ -33,12 +34,10 @@ public class DynoQueueDemo extends DynoJedisDemo {
      * throws java.lang.RuntimeException: java.net.ConnectException: Connection timed out (Connection timed out)
      * if the cluster is not reachable.
      *
-     * @param args:
-     * cluster-name version
-     *
-     * cluster-name: Name of cluster to run demo against
-     * version: Possible values = 1 or 2; (for V1 or V2)
-     *
+     * @param args: cluster-name version
+     *              <p>
+     *              cluster-name: Name of cluster to run demo against
+     *              version: Possible values = 1 or 2; (for V1 or V2)
      */
     public static void main(String[] args) throws IOException {
         final String clusterName = args[0];
@@ -101,7 +100,7 @@ public class DynoQueueDemo extends DynoJedisDemo {
         List<Message> popped_msgs = V1Queue.pop(3, 1000, TimeUnit.MILLISECONDS);
 
         // Test ack()
-        assert(V1Queue.ack(popped_msgs.get(0).getId()));
+        assert (V1Queue.ack(popped_msgs.get(0).getId()));
 
         V1Queue.close();
     }
@@ -118,6 +117,7 @@ public class DynoQueueDemo extends DynoJedisDemo {
         DynoQueue queue = new QueueBuilder()
                 .setQueueName("test")
                 .setCurrentShard(ss.getCurrentShard())
+                .setHostToShardMap(h -> h.getRack().replaceAll(region, ""))
                 .setRedisKeyPrefix(prefix)
                 .useDynomite(dyno, dyno, dyno.getConnPool().getConfiguration().getHostSupplier())
                 .setUnackTime(50_000)

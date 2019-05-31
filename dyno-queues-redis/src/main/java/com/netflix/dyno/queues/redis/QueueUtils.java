@@ -18,6 +18,7 @@ public class QueueUtils {
 
     /**
      * Execute function with retries if required
+     *
      * @param opName
      * @param keyName
      * @param r
@@ -50,6 +51,7 @@ public class QueueUtils {
 
     /**
      * Construct standard objectmapper to use within the DynoQueue instances to read/write Message objects
+     *
      * @return
      */
     public static ObjectMapper constructObjectMapper() {
