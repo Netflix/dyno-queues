@@ -29,10 +29,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Response;
 import redis.clients.jedis.Tuple;
-import redis.clients.jedis.params.sortedset.ZAddParams;
+import redis.clients.jedis.params.ZAddParams;
 
 import java.io.IOException;
-import java.lang.UnsupportedOperationException;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Collections;

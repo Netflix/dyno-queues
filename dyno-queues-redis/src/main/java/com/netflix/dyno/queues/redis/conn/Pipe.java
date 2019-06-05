@@ -16,10 +16,9 @@
 package com.netflix.dyno.queues.redis.conn;
 
 import com.netflix.dyno.jedis.DynoJedisPipeline;
-
 import redis.clients.jedis.Pipeline;
 import redis.clients.jedis.Response;
-import redis.clients.jedis.params.sortedset.ZAddParams;
+import redis.clients.jedis.params.ZAddParams;
 
 /**
  *

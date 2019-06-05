@@ -19,7 +19,7 @@ import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.ShardSupplier;
 import com.netflix.dyno.queues.redis.sharding.RoundRobinStrategy;
 import com.netflix.dyno.queues.redis.sharding.ShardingStrategy;
-import redis.clients.jedis.JedisCommands;
+import redis.clients.jedis.commands.JedisCommands;
 
 import java.io.Closeable;
 import java.io.IOException;

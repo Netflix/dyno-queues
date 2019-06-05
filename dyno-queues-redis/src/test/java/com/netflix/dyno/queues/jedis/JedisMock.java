@@ -18,6 +18,16 @@
  */
 package com.netflix.dyno.queues.jedis;
 
+import org.rarefiedredis.redis.IRedisClient;
+import org.rarefiedredis.redis.IRedisSortedSet.ZsetPair;
+import org.rarefiedredis.redis.RedisMock;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.ScanParams;
+import redis.clients.jedis.ScanResult;
+import redis.clients.jedis.Tuple;
+import redis.clients.jedis.exceptions.JedisException;
+import redis.clients.jedis.params.ZAddParams;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -26,17 +36,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import org.rarefiedredis.redis.IRedisClient;
-import org.rarefiedredis.redis.IRedisSortedSet.ZsetPair;
-import org.rarefiedredis.redis.RedisMock;
-
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.ScanParams;
-import redis.clients.jedis.ScanResult;
-import redis.clients.jedis.Tuple;
-import redis.clients.jedis.exceptions.JedisException;
-import redis.clients.jedis.params.sortedset.ZAddParams;
 
 /**
  * @author Viren
@@ -68,7 +67,6 @@ public class JedisMock extends Jedis {
         }
     }
 
-    @Override
     public String set(final String key, final String value, final String nxxx, final String expx, final long time) {
         try {
             return redis.set(key, value, nxxx, expx, String.valueOf(time));
@@ -733,8 +731,7 @@ public class JedisMock extends Jedis {
     public Long zadd(String key, double score, String member, ZAddParams params) {
 
         try {
-
-            if (params.contains("xx")) {
+            if (params.getParam("xx") != null) {
                 Double existing = redis.zscore(key, member);
                 if (existing == null) {
                     return 0L;

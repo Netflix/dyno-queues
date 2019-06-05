@@ -26,10 +26,9 @@ import com.netflix.dyno.queues.redis.sharding.ShardingStrategy;
 import com.netflix.servo.monitor.Stopwatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.clients.jedis.JedisCommands;
-import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Tuple;
-import redis.clients.jedis.params.sortedset.ZAddParams;
+import redis.clients.jedis.commands.JedisCommands;
+import redis.clients.jedis.params.ZAddParams;
 
 import java.io.IOException;
 import java.time.Clock;
