@@ -64,11 +64,11 @@ public class BenchmarkTestsDynoJedis extends QueueBenchmark {
 
         queue = qb
                 .setCurrentShard("a")
-                .setHostToShardMap((Host h) -> h.getRack().substring(h.getRack().length() - 1))
+//                .setHostToShardMap((Host h) -> h.getRack().substring(h.getRack().length() - 1))
                 .setQueueName("testq")
                 .setRedisKeyPrefix("keyprefix")
                 .setUnackTime(60_000)
-                .useDynomite(client, client, hs)
+                .useDynomite(client, client)
                 .build();
     }
 

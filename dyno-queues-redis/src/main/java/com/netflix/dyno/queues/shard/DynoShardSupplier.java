@@ -18,10 +18,12 @@
  */
 package com.netflix.dyno.queues.shard;
 
+import com.netflix.dyno.connectionpool.Host;
 import com.netflix.dyno.connectionpool.HostSupplier;
 import com.netflix.dyno.queues.ShardSupplier;
 
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -35,6 +37,8 @@ public class DynoShardSupplier implements ShardSupplier {
     private String region;
 
     private String localRack;
+
+    private Function<String, String> rackToShardMap = rack -> rack.substring(rack.length()-1);
 
     /**
      * Dynomite based shard supplier.  Keeps the number of shards in parity with the hosts and regions
@@ -50,13 +54,16 @@ public class DynoShardSupplier implements ShardSupplier {
 
     @Override
     public String getCurrentShard() {
-        return localRack.replaceAll(region, "");
+        return rackToShardMap.apply(localRack);
     }
 
     @Override
     public Set<String> getQueueShards() {
-        return hs.getHosts().stream().map(host -> host.getRack()).map(rack -> rack.replaceAll(region, "")).collect(Collectors.toSet());
+        return hs.getHosts().stream().map(host -> host.getRack()).map(rackToShardMap).collect(Collectors.toSet());
     }
 
-
+    @Override
+    public String getShardForHost(Host host) {
+        return rackToShardMap.apply(host.getRack());
+    }
 }

@@ -23,11 +23,12 @@ import com.netflix.dyno.connectionpool.impl.lb.HostToken;
 import com.netflix.dyno.jedis.DynoJedisClient;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.redis.BaseQueueTests;
-import com.netflix.dyno.queues.redis.v2.QueueBuilder;
-import com.netflix.dyno.queues.redis.v2.RedisPipelineQueue;
 import redis.clients.jedis.Jedis;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
 
 public class DynoJedisTests extends BaseQueueTests {
 
@@ -89,11 +90,10 @@ public class DynoJedisTests extends BaseQueueTests {
 
         return qb
                 .setCurrentShard("a")
-                .setHostToShardMap((Host h) -> h.getRack().substring(h.getRack().length() - 1))
                 .setQueueName(queueName)
                 .setRedisKeyPrefix(redisKeyPrefix)
                 .setUnackTime(1_000)
-                .useDynomite(client, client, hs)
+                .useDynomite(client, client)
                 .build();
     }
 

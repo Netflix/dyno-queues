@@ -23,7 +23,6 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
-import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -65,7 +64,6 @@ public class MultiQueueTests {
         QueueBuilder qb = new QueueBuilder();
         DynoQueue queue = qb
                 .setCurrentShard("a")
-                .setHostToShardMap((Host h) -> h.getRack().substring(h.getRack().length() - 1))
                 .setQueueName(queueName)
                 .setRedisKeyPrefix(redisKeyPrefix)
                 .setUnackTime(50_000)

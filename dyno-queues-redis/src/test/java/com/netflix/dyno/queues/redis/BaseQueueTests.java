@@ -18,20 +18,30 @@ package com.netflix.dyno.queues.redis;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
-import com.netflix.dyno.queues.redis.conn.JedisProxy;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.JedisPoolConfig;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public abstract class BaseQueueTests {
 
@@ -162,19 +172,15 @@ public abstract class BaseQueueTests {
         List<Message> allMsgs = new CopyOnWriteArrayList<>();
         AtomicInteger consumed = new AtomicInteger(0);
         AtomicInteger counter = new AtomicInteger(0);
-        Runnable consumer = new Runnable() {
-
-            @Override
-            public void run() {
-                if (consumed.get() >= count) {
-                    return;
-                }
-                List<Message> popped = rdq.pop(100, 1, TimeUnit.MILLISECONDS);
-                allMsgs.addAll(popped);
-                consumed.addAndGet(popped.size());
-                popped.stream().forEach(p -> latch.countDown());
-                counter.incrementAndGet();
+        Runnable consumer = () -> {
+            if (consumed.get() >= count) {
+                return;
             }
+            List<Message> popped = rdq.pop(100, 1, TimeUnit.MILLISECONDS);
+            allMsgs.addAll(popped);
+            consumed.addAndGet(popped.size());
+            popped.stream().forEach(p -> latch.countDown());
+            counter.incrementAndGet();
         };
         for (int c = 0; c < 2; c++) {
             ses.scheduleWithFixedDelay(consumer, 1, 10, TimeUnit.MILLISECONDS);
@@ -186,7 +192,12 @@ public abstract class BaseQueueTests {
         assertEquals(count, allMsgs.size());
         assertEquals(count, uniqueMessages.size());
         List<Message> more = rdq.pop(1, 1, TimeUnit.SECONDS);
-        assertEquals(0, more.size());
+        // If we published more than we consumed since we could've published more than we consumed in which case this
+        // will not be empty
+        if(published.get() == consumed.get())
+            assertEquals(0, more.size());
+        else
+            assertEquals(1, more.size());
 
         ses.shutdownNow();
     }

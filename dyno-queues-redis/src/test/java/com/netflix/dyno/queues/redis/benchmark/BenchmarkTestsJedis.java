@@ -3,13 +3,12 @@
  */
 package com.netflix.dyno.queues.redis.benchmark;
 
-import java.util.LinkedList;
-import java.util.List;
-
 import com.netflix.dyno.connectionpool.Host;
-
 import com.netflix.dyno.queues.redis.v2.QueueBuilder;
 import redis.clients.jedis.JedisPoolConfig;
+
+import java.util.LinkedList;
+import java.util.List;
 
 /**
  * @author Viren
@@ -32,7 +31,6 @@ public class BenchmarkTestsJedis extends QueueBenchmark {
 
         queue = qb
                 .setCurrentShard("a")
-                .setHostToShardMap((Host h) -> h.getRack().substring(h.getRack().length() - 1))
                 .setQueueName("testq")
                 .setRedisKeyPrefix("keyprefix")
                 .setUnackTime(60_000_000)

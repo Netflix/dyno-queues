@@ -18,7 +18,6 @@
  */
 package com.netflix.dyno.queues.redis.v2;
 
-import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Lists;
 import com.netflix.appinfo.AmazonInfo;
@@ -29,11 +28,14 @@ import com.netflix.discovery.EurekaClient;
 import com.netflix.discovery.shared.Application;
 import com.netflix.dyno.connectionpool.Host;
 import com.netflix.dyno.connectionpool.HostSupplier;
+import com.netflix.dyno.connectionpool.impl.utils.ConfigUtils;
 import com.netflix.dyno.jedis.DynoJedisClient;
 import com.netflix.dyno.queues.DynoQueue;
+import com.netflix.dyno.queues.ShardSupplier;
 import com.netflix.dyno.queues.redis.conn.DynoClientProxy;
 import com.netflix.dyno.queues.redis.conn.JedisProxy;
 import com.netflix.dyno.queues.redis.conn.RedisConnection;
+import com.netflix.dyno.queues.shard.DynoShardSupplier;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
@@ -61,9 +63,13 @@ public class QueueBuilder {
 
     private String currentShard;
 
-    private Function<Host, String> hostToShardMap;
+    private ShardSupplier shardSupplier;
 
     private HostSupplier hs;
+
+    private EurekaClient eurekaClient;
+
+    private String applicationName;
 
     private Collection<Host> hosts;
 
@@ -79,6 +85,16 @@ public class QueueBuilder {
      */
     public QueueBuilder setClock(Clock clock) {
         this.clock = clock;
+        return this;
+    }
+
+    public QueueBuilder setApplicationName(String appName) {
+        this.applicationName = appName;
+        return this;
+    }
+
+    public QueueBuilder setEurekaClient(EurekaClient eurekaClient) {
+        this.eurekaClient = eurekaClient;
         return this;
     }
 
@@ -114,22 +130,12 @@ public class QueueBuilder {
      *
      * @param dynoQuorumClient
      * @param dynoNonQuorumClient
-     * @param hs
      * @return
      */
-    public QueueBuilder useDynomite(DynoJedisClient dynoQuorumClient, DynoJedisClient dynoNonQuorumClient, HostSupplier hs) {
+    public QueueBuilder useDynomite(DynoJedisClient dynoQuorumClient, DynoJedisClient dynoNonQuorumClient) {
         this.dynoQuorumClient = dynoQuorumClient;
         this.dynoNonQuorumClient = dynoNonQuorumClient;
-        this.hs = hs;
-        return this;
-    }
-
-    /**
-     * @param hostToShardMap Mapping from a Host to a queue shard
-     * @return instance of QueueBuilder
-     */
-    public QueueBuilder setHostToShardMap(Function<Host, String> hostToShardMap) {
-        this.hostToShardMap = hostToShardMap;
+        this.hs = dynoQuorumClient.getConnPool().getConfiguration().getHostSupplier();
         return this;
     }
 
@@ -152,6 +158,15 @@ public class QueueBuilder {
     }
 
     /**
+     * @param shardSupplier
+     * @return
+     */
+    public QueueBuilder setShardSupplier(ShardSupplier shardSupplier) {
+        this.shardSupplier = shardSupplier;
+        return this;
+    }
+
+    /**
      *
      * @return Build an instance of the queue with supplied parameters.
      * @see MultiRedisQueue
@@ -159,18 +174,29 @@ public class QueueBuilder {
      */
     public DynoQueue build() {
 
+        boolean useDynomiteCluster = dynoQuorumClient != null;
+        if (useDynomiteCluster) {
+            if(hs == null) {
+                hs = dynoQuorumClient.getConnPool().getConfiguration().getHostSupplier();
+            }
+            this.hosts = hs.getHosts();
+        }
+
+        if (shardSupplier == null) {
+            String region = ConfigUtils.getDataCenter();
+            String az = ConfigUtils.getLocalZone();
+            shardSupplier = new DynoShardSupplier(hs, region, az);
+        }
+        if(currentShard == null)
+            currentShard = shardSupplier.getCurrentShard();
+
         if (clock == null) {
             clock = Clock.systemDefaultZone();
         }
 
-        boolean useDynomiteCluster = (dynoQuorumClient != null && hs != null);
-        if (useDynomiteCluster) {
-            this.hosts = hs.getHosts();
-        }
-
         Map<String, Host> shardMap = new HashMap<>();
         for (Host host : hosts) {
-            String shard = hostToShardMap.apply(host);
+            String shard = shardSupplier.getShardForHost(host);
             shardMap.put(shard, host);
         }
 
@@ -189,6 +215,9 @@ public class QueueBuilder {
 
             if (useDynomiteCluster) {
                 redisConn = new DynoClientProxy(dynoQuorumClient);
+                if(dynoNonQuorumClient == null) {
+                    dynoNonQuorumClient = dynoQuorumClient;
+                }
                 redisConnRead = new DynoClientProxy(dynoNonQuorumClient);
             } else {
                 JedisPool pool = new JedisPool(redisPoolConfig, hostAddress, host.getPort(), 0);
@@ -212,26 +241,24 @@ public class QueueBuilder {
     }
 
 
-    private static List<Host> getHostsFromEureka(EurekaClient ec, String applicationName) {
+    private HostSupplier getHostSupplierFromEureka(String applicationName) {
+        return () -> {
+            Application app = eurekaClient.getApplication(applicationName);
+            List<Host> hosts = new ArrayList<>();
 
-        Application app = ec.getApplication(applicationName);
-        List<Host> hosts = new ArrayList<Host>();
+            if (app == null) {
+                return hosts;
+            }
 
-        if (app == null) {
-            return hosts;
-        }
+            List<InstanceInfo> ins = app.getInstances();
 
-        List<InstanceInfo> ins = app.getInstances();
+            if (ins == null || ins.isEmpty()) {
+                return hosts;
+            }
 
-        if (ins == null || ins.isEmpty()) {
-            return hosts;
-        }
+            hosts = Lists.newArrayList(Collections2.transform(ins,
 
-        hosts = Lists.newArrayList(Collections2.transform(ins,
-
-                new Function<InstanceInfo, Host>() {
-                    @Override
-                    public Host apply(InstanceInfo info) {
+                    info -> {
 
                         Host.Status status = info.getStatus() == InstanceStatus.UP ? Host.Status.Up : Host.Status.Down;
                         String rack = null;
@@ -241,8 +268,8 @@ public class QueueBuilder {
                         }
                         Host host = new Host(info.getHostName(), info.getIPAddr(), rack, status);
                         return host;
-                    }
-                }));
-        return hosts;
+                    }));
+            return hosts;
+        };
     }
 }

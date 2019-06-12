@@ -18,6 +18,8 @@
  */
 package com.netflix.dyno.queues;
 
+import com.netflix.dyno.connectionpool.Host;
+
 import java.util.Set;
 
 
@@ -39,4 +41,10 @@ public interface ShardSupplier {
      */
     public String getCurrentShard();
 
+    /**
+     *
+     * @param host
+     * @return shard for this host based on the rack
+     */
+    public String getShardForHost(Host host);
 }
