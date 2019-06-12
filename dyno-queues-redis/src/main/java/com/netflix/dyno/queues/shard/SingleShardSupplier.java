@@ -18,10 +18,11 @@
  */
 package com.netflix.dyno.queues.shard;
 
-import java.util.Set;
-
 import com.google.common.collect.Sets;
+import com.netflix.dyno.connectionpool.Host;
 import com.netflix.dyno.queues.ShardSupplier;
+
+import java.util.Set;
 
 /**
  * @author Viren
@@ -37,6 +38,11 @@ public class SingleShardSupplier implements ShardSupplier {
 
     @Override
     public String getCurrentShard() {
+        return shardName;
+    }
+
+    @Override
+    public String getShardForHost(Host host) {
         return shardName;
     }
 

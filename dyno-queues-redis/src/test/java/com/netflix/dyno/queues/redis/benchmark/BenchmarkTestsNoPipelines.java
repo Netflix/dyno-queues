@@ -12,11 +12,11 @@ import com.netflix.dyno.jedis.DynoJedisClient;
 import com.netflix.dyno.queues.ShardSupplier;
 import com.netflix.dyno.queues.redis.RedisQueues;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 
 /**
  * @author Viren
@@ -79,6 +79,11 @@ public class BenchmarkTestsNoPipelines extends QueueBenchmark {
             @Override
             public String getCurrentShard() {
                 return shardName;
+            }
+
+            @Override
+            public String getShardForHost(Host host) {
+                return null;
             }
         };
 

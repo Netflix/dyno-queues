@@ -106,20 +106,12 @@ public class DynoQueueDemo extends DynoJedisDemo {
     }
 
     private void runSimpleV2QueueDemo(DynoJedisClient dyno) throws IOException {
-        String region = System.getProperty("LOCAL_DATACENTER");
-        String localRack = System.getProperty("LOCAL_RACK");
-
         String prefix = "dynoQueue_";
-
-
-        DynoShardSupplier ss = new DynoShardSupplier(dyno.getConnPool().getConfiguration().getHostSupplier(), region, localRack);
 
         DynoQueue queue = new QueueBuilder()
                 .setQueueName("test")
-                .setCurrentShard(ss.getCurrentShard())
-                .setHostToShardMap(h -> h.getRack().replaceAll(region, ""))
                 .setRedisKeyPrefix(prefix)
-                .useDynomite(dyno, dyno, dyno.getConnPool().getConfiguration().getHostSupplier())
+                .useDynomite(dyno, dyno)
                 .setUnackTime(50_000)
                 .build();
 

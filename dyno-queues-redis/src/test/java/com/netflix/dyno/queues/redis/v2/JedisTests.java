@@ -18,13 +18,12 @@ package com.netflix.dyno.queues.redis.v2;
 import com.netflix.dyno.connectionpool.Host;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.redis.BaseQueueTests;
-import com.netflix.dyno.queues.redis.v2.QueueBuilder;
-import com.netflix.dyno.queues.redis.v2.RedisPipelineQueue;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
-import java.util.*;
+import java.util.LinkedList;
+import java.util.List;
 
 /**
  *
@@ -62,7 +61,6 @@ public class JedisTests extends BaseQueueTests {
         QueueBuilder qb = new QueueBuilder();
         DynoQueue queue = qb
                 .setCurrentShard("a")
-                .setHostToShardMap((Host h) -> h.getRack().substring(h.getRack().length() - 1))
                 .setQueueName(queueName)
                 .setRedisKeyPrefix(redisKeyPrefix)
                 .setUnackTime(1_000)

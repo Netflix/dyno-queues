@@ -90,6 +90,11 @@ public class RedisDynoQueueTest {
             public String getCurrentShard() {
                 return shardName;
             }
+
+            @Override
+            public String getShardForHost(Host host) {
+                return null;
+            }
         };
         messageKey = redisKeyPrefix + ".MESSAGE." + queueName;
 

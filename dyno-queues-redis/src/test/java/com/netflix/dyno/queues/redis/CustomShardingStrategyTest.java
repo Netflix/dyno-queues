@@ -95,6 +95,11 @@ public class CustomShardingStrategyTest {
             public String getCurrentShard() {
                 return shard1Name;
             }
+
+            @Override
+            public String getShardForHost(Host host) {
+                return null;
+            }
         };
 
         ShardSupplier shard2Supplier = new ShardSupplier() {
@@ -107,6 +112,11 @@ public class CustomShardingStrategyTest {
             @Override
             public String getCurrentShard() {
                 return shard2Name;
+            }
+
+            @Override
+            public String getShardForHost(Host host) {
+                return null;
             }
         };
 
@@ -121,6 +131,11 @@ public class CustomShardingStrategyTest {
             @Override
             public String getCurrentShard() {
                 return shard3Name;
+            }
+
+            @Override
+            public String getShardForHost(Host host) {
+                return null;
             }
         };
 
