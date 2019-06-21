@@ -187,8 +187,9 @@ public class QueueBuilder {
             String az = ConfigUtils.getLocalZone();
             shardSupplier = new DynoShardSupplier(hs, region, az);
         }
-        if(currentShard == null)
+        if(currentShard == null) {
             currentShard = shardSupplier.getCurrentShard();
+        }
 
         if (clock == null) {
             clock = Clock.systemDefaultZone();
