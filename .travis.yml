@@ -1,6 +1,6 @@
 language: java
 jdk:
-- oraclejdk8
+- openjdk8
 install:
     - export REDIS_BIN=$HOME/redis/3.0.7/bin
     - export TMPDIR=/tmp
