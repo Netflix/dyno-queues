@@ -17,7 +17,7 @@ package com.netflix.dyno.queues.redis;
 
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.netflix.dyno.connectionpool.Host;
-import com.netflix.dyno.connectionpool.Host.Status;
+import com.netflix.dyno.connectionpool.HostBuilder;
 import com.netflix.dyno.connectionpool.HostSupplier;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
@@ -70,7 +70,14 @@ public class RedisDynoQueueTest {
             @Override
             public List<Host> getHosts() {
                 List<Host> hosts = new LinkedList<>();
-                hosts.add(new Host("ec2-11-22-33-444.compute-0.amazonaws.com", 8102, "us-east-1d", Status.Up));
+                hosts.add(
+                        new HostBuilder()
+                                .setHostname("ec2-11-22-33-444.compute-0.amazonaws.com")
+                                .setPort(8102)
+                                .setRack("us-east-1d")
+                                .setStatus(Host.Status.Up)
+                                .createHost()
+                );
                 return hosts;
             }
         };

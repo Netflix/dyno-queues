@@ -4,6 +4,7 @@
 package com.netflix.dyno.queues.redis.benchmark;
 
 import com.netflix.dyno.connectionpool.Host;
+import com.netflix.dyno.connectionpool.HostBuilder;
 import com.netflix.dyno.connectionpool.HostSupplier;
 import com.netflix.dyno.connectionpool.TokenMapSupplier;
 import com.netflix.dyno.connectionpool.impl.ConnectionPoolConfigurationImpl;
@@ -30,7 +31,16 @@ public class BenchmarkTestsNoPipelines extends QueueBenchmark {
         String queueName = "nopipequeue";
 
         List<Host> hosts = new ArrayList<>(1);
-        hosts.add(new Host("localhost", "127.0.0.1", 6379, "us-east-1c", "us-east-1", Host.Status.Up));
+        hosts.add(
+                new HostBuilder()
+                        .setHostname("localhost")
+                        .setIpAddress("127.0.0.1")
+                        .setPort(6379)
+                        .setRack("us-east-1c")
+                        .setDatacenter("us-east-1")
+                        .setStatus(Host.Status.Up)
+                        .createHost()
+        );
 
         DynoJedisClient.Builder builder = new DynoJedisClient.Builder();
         HostSupplier hs = new HostSupplier() {

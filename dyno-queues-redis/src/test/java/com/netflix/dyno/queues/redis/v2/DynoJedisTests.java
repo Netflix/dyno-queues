@@ -16,6 +16,7 @@
 package com.netflix.dyno.queues.redis.v2;
 
 import com.netflix.dyno.connectionpool.Host;
+import com.netflix.dyno.connectionpool.HostBuilder;
 import com.netflix.dyno.connectionpool.HostSupplier;
 import com.netflix.dyno.connectionpool.TokenMapSupplier;
 import com.netflix.dyno.connectionpool.impl.ConnectionPoolConfigurationImpl;
@@ -48,7 +49,16 @@ public class DynoJedisTests extends BaseQueueTests {
     public DynoQueue getQueue(String redisKeyPrefix, String queueName) {
 
         List<Host> hosts = new ArrayList<>(1);
-        hosts.add(new Host("localhost", "127.0.0.1", 6379, "us-east-1a", "us-east-1", Host.Status.Up));
+        hosts.add(
+                new HostBuilder()
+                        .setHostname("localhost")
+                        .setIpAddress("127.0.0.1")
+                        .setPort(6379)
+                        .setRack("us-east-1a")
+                        .setDatacenter("us-east-1")
+                        .setStatus(Host.Status.Up)
+                        .createHost()
+        );
 
 
         QueueBuilder qb = new QueueBuilder();
