@@ -7,6 +7,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 import com.netflix.dyno.connectionpool.Host;
+import com.netflix.dyno.connectionpool.HostBuilder;
 
 import com.netflix.dyno.queues.redis.v2.QueueBuilder;
 import redis.clients.jedis.JedisPoolConfig;
@@ -19,7 +20,14 @@ public class BenchmarkTestsJedis extends QueueBenchmark {
 
 	public BenchmarkTestsJedis() {
 		List<Host> hosts = new LinkedList<>();
-		hosts.add(new Host("localhost", 6379, "us-east-1a"));
+		hosts.add(
+				new HostBuilder()
+						.setHostname("localhost")
+						.setPort(6379)
+						.setRack("us-east-1a")
+						.createHost()
+		);
+
 		QueueBuilder qb = new QueueBuilder();
 		
 		JedisPoolConfig config = new JedisPoolConfig();

@@ -16,6 +16,7 @@
 package com.netflix.dyno.queues.redis.v2;
 
 import com.netflix.dyno.connectionpool.Host;
+import com.netflix.dyno.connectionpool.HostBuilder;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.redis.BaseQueueTests;
 import com.netflix.dyno.queues.redis.v2.QueueBuilder;
@@ -57,7 +58,13 @@ public class JedisTests extends BaseQueueTests {
         dynoClient.flushAll();
 
         List<Host> hosts = new LinkedList<>();
-        hosts.add(new Host("localhost", 6379, "us-east-1a"));
+        hosts.add(
+                new HostBuilder()
+                        .setHostname("localhost")
+                        .setPort(6379)
+                        .setRack("us-east-1a")
+                        .createHost()
+        );
 
         QueueBuilder qb = new QueueBuilder();
         DynoQueue queue = qb

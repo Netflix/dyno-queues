@@ -37,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import com.netflix.dyno.connectionpool.HostBuilder;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -71,7 +72,14 @@ public class RedisDynoQueueTest {
 			@Override
 			public List<Host> getHosts() {
 				List<Host> hosts = new LinkedList<>();
-				hosts.add(new Host("ec2-11-22-33-444.compute-0.amazonaws.com", 8102, "us-east-1d", Status.Up));
+				hosts.add(
+						new HostBuilder()
+								.setHostname("ec2-11-22-33-444.compute-0.amazonaws.com")
+								.setPort(8102)
+								.setRack("us-east-1d")
+								.setStatus(Host.Status.Up)
+								.createHost()
+                );
 				return hosts;
 			}
 		};

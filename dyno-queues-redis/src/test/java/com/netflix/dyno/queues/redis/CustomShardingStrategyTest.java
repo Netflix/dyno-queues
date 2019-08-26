@@ -16,6 +16,7 @@
 package com.netflix.dyno.queues.redis;
 
 import com.netflix.dyno.connectionpool.Host;
+import com.netflix.dyno.connectionpool.HostBuilder;
 import com.netflix.dyno.connectionpool.HostSupplier;
 import com.netflix.dyno.queues.Message;
 import com.netflix.dyno.queues.ShardSupplier;
@@ -68,9 +69,30 @@ public class CustomShardingStrategyTest {
             @Override
             public List<Host> getHosts() {
                 List<Host> hosts = new LinkedList<>();
-                hosts.add(new Host("host1", 8102, "rack1", Host.Status.Up));
-                hosts.add(new Host("host2", 8102, "rack2", Host.Status.Up));
-                hosts.add(new Host("host3", 8102, "rack3", Host.Status.Up));
+                hosts.add(
+                        new HostBuilder()
+                                .setHostname("localhost")
+                                .setPort(8102)
+                                .setRack("rack1")
+                                .setStatus(Host.Status.Up)
+                                .createHost()
+                );
+                hosts.add(
+                        new HostBuilder()
+                                .setHostname("localhost")
+                                .setPort(8102)
+                                .setRack("rack2")
+                                .setStatus(Host.Status.Up)
+                                .createHost()
+                );
+                hosts.add(
+                        new HostBuilder()
+                                .setHostname("localhost")
+                                .setPort(8102)
+                                .setRack("rack3")
+                                .setStatus(Host.Status.Up)
+                                .createHost()
+                );
                 return hosts;
             }
         };

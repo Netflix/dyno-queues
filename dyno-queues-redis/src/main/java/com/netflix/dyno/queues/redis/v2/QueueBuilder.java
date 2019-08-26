@@ -31,6 +31,7 @@ import com.netflix.appinfo.InstanceInfo.InstanceStatus;
 import com.netflix.discovery.EurekaClient;
 import com.netflix.discovery.shared.Application;
 import com.netflix.dyno.connectionpool.Host;
+import com.netflix.dyno.connectionpool.HostBuilder;
 import com.netflix.dyno.connectionpool.HostSupplier;
 import com.netflix.dyno.jedis.DynoJedisClient;
 import com.netflix.dyno.queues.DynoQueue;
@@ -236,7 +237,12 @@ public class QueueBuilder {
                             AmazonInfo amazonInfo = (AmazonInfo) info.getDataCenterInfo();
                             rack = amazonInfo.get(MetaDataKey.availabilityZone);
                         }
-                        Host host = new Host(info.getHostName(), info.getIPAddr(), rack, status);
+                        //Host host = new Host(info.getHostName(), info.getIPAddr(), rack, status);
+                        Host host = new HostBuilder()
+                                .setHostname(info.getHostName())
+                                .setIpAddress(info.getIPAddr())
+                                .setRack(rack).setStatus(status)
+                                .createHost();
                         return host;
                     }
                 }));
