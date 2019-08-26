@@ -55,7 +55,7 @@ public class DynoQueueDemo extends DynoJedisDemo {
         }
 
         try {
-            demo.initWithRemoteClusterFromEurekaUrl(args[0], 8102);
+            demo.initWithRemoteClusterFromEurekaUrl(args[0], 8102, false);
 
             if (version == 1) {
                 demo.runSimpleV1Demo(demo.client);
