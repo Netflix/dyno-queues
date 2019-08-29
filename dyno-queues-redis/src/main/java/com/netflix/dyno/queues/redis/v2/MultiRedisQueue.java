@@ -153,6 +153,11 @@ public class MultiRedisQueue implements DynoQueue {
     }
 
     @Override
+    public String getMsgWithPredicate(String predicate) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public Message get(String messageId) {
         for (DynoQueue q : queues.values()) {
             Message msg = q.get(messageId);
