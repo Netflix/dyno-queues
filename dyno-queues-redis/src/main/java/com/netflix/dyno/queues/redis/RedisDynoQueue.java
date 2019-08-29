@@ -268,7 +268,7 @@ public class RedisDynoQueue implements DynoQueue {
             long added = quorumConn.zadd(unackQueueName, unackScore, msgId, zParams);
             if (added == 0) {
                 if (logger.isDebugEnabled()) {
-                    logger.debug("cannot add {} to the unack shard ", queueName, msgId);
+                    logger.debug("cannot add {} to the unack shard {}", msgId, unackQueueName);
                 }
                 monitor.misses.increment();
                 continue;
@@ -444,35 +444,43 @@ public class RedisDynoQueue implements DynoQueue {
 
     @Override
     public boolean containsPredicate(String predicate) {
-        return execute("containsPredicate", messageStoreKey, () -> {
+        return execute("containsPredicate", messageStoreKey, () -> getMsgWithPredicate(predicate) != null);
+    }
+
+    @Override
+    public String getMsgWithPredicate(String predicate) {
+        return execute("getMsgWithPredicate", messageStoreKey, () -> {
 
             // We use a Lua script here to do predicate matching since we only want to find whether the predicate
             // exists in any of the message bodies or not, and the only way to do that is to check for the predicate
             // match on the server side.
             // The alternative is to have the server return all the hash values back to us and we filter it here on
             // the client side. This is not desirable since we would potentially be sending large amounts of data
-            // over the network only to return a 'true' or 'false' value back to the calling application.
+            // over the network only to return a single string value back to the calling application.
             String predicateCheckLuaScript = "local hkey=KEYS[1]\n" +
                     "local predicate=ARGV[1]\n" +
                     "local cursor=0\n" +
                     "local begin=false\n" +
                     "while (cursor ~= 0 or begin==false) do\n" +
                     "  local ret = redis.call('hscan', hkey, cursor)\n" +
+                    "  local curmsgid\n" +
                     "  for i, content in ipairs(ret[2]) do\n" +
-                    "    if (string.find(content, predicate)) then\n" +
-                    "      return 1\n" +
+                    "    if (i % 2 ~= 0) then\n" +
+                    "      curmsgid = content\n" +
+                    "    elseif (string.find(content, predicate)) then\n" +
+                    "      return curmsgid\n" +
                     "    end\n" +
                     "  end\n" +
                     "  cursor=tonumber(ret[1])\n" +
                     "  begin=true\n" +
                     "end\n" +
-                    "return 0";
+                    "return nil";
 
             // Cast from 'JedisCommands' to 'DynoJedisClient' here since the former does not expose 'eval()'.
-            Long retval = (Long) ((DynoJedisClient) quorumConn).eval(predicateCheckLuaScript,
+            String retval = (String) ((DynoJedisClient) quorumConn).eval(predicateCheckLuaScript,
                     Collections.singletonList(messageStoreKey), Collections.singletonList(predicate));
 
-            return (retval == 1);
+            return retval;
         });
     }
 

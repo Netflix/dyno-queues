@@ -129,6 +129,18 @@ public interface DynoQueue extends Closeable {
     public boolean containsPredicate(String predicate);
 
     /**
+     * Checks the message bodies (i.e. the data in the hash map), and returns the ID of the first message to match with
+     * 'predicate'.
+     *
+     * Disclaimer: This is a potentially expensive call, since we will iterate over the entire hash map in the
+     * worst case. Use mindfully.
+     *
+     * @param predicate The predicate to check against.
+     * @return Message ID as string if any of the messages contain 'predicate'; 'null' otherwise.
+     */
+    public String getMsgWithPredicate(String predicate);
+
+    /**
      *
      * @param messageId message to be retrieved.
      * @return Retrieves the message stored in the queue by the messageId.  Null if not found.

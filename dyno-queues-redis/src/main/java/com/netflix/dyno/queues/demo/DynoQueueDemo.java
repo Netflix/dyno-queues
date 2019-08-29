@@ -84,24 +84,29 @@ public class DynoQueueDemo extends DynoJedisDemo {
 
         Message msg1 = new Message("id1", "searchable payload");
         Message msg2 = new Message("id2", "payload 2");
-        Message msg3 = new Message("id2", "payload 3");
+        Message msg3 = new Message("id3", "payload 3");
         DynoQueue V1Queue = queues.get("simpleQueue");
 
         // Test push() API
         List pushed_msgs = V1Queue.push(ImmutableList.of(msg1, msg2, msg3));
 
         // Test ensure() API
-        logger.info("Does Message with ID '" + msg1.getId() + "' already exist? " + !V1Queue.ensure(msg1));
+        logger.info("Does Message with ID '" + msg1.getId() + "' already exist? -> " + !V1Queue.ensure(msg1));
 
         // Test containsPredicate() API
-        logger.info("Does the predicate 'searchable' exist in  the queue ? " + V1Queue.containsPredicate("searchable"));
+        logger.info("Does the predicate 'searchable' exist in  the queue? -> " + V1Queue.containsPredicate("searchable"));
+
+        // Test getMsgWithPredicate() API
+        logger.info("Get MSG ID that contains 'searchable' in the queue -> " + V1Queue.getMsgWithPredicate("searchable"));
 
         // Test pop()
         List<Message> popped_msgs = V1Queue.pop(3, 1000, TimeUnit.MILLISECONDS);
 
         // Test ack()
-        assert (V1Queue.ack(popped_msgs.get(0).getId()));
+        boolean ack_successful = V1Queue.ack(popped_msgs.get(0).getId());
+        assert(ack_successful);
 
+        V1Queue.clear();
         V1Queue.close();
     }
 
