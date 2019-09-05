@@ -1,5 +1,5 @@
 
 dependencies {
-	compile 'com.netflix.dyno:dyno-core:1.6.9'
+	compile 'com.netflix.dyno:dyno-core:1.7.0'
 	testCompile "junit:junit:4.11"
 }
