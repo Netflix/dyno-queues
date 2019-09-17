@@ -90,6 +90,10 @@ public class MultiRedisQueue implements DynoQueue {
     }
 
     @Override
+    public Message popWithMsgId(String messageId) {
+        throw new UnsupportedOperationException();
+    }
+    @Override
     public List<Message> peek(int messageCount) {
         return me.peek(messageCount);
     }

@@ -226,6 +226,61 @@ public class RedisDynoQueue implements DynoQueue {
 
     }
 
+    @Override
+    public Message popWithMsgId(String messageId) {
+
+        return execute("popWithMsgId", myQueueShard, () -> {
+            double unackScore = Long.valueOf(clock.millis() + unackTime).doubleValue();
+            String unackQueueName = getUnackKey(queueName, shardName);
+
+            ZAddParams zParams = ZAddParams.zAddParams().nx();
+
+            try {
+                long exists = nonQuorumConn.zrank(myQueueShard, messageId);
+                // If an exception wasn't thrown, the element has to exist.
+                assert(exists >= 0);
+            } catch (NullPointerException e) {
+                // If we get a NPE, that means "messageId" does not exist in the sorted set.
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Cannot get the message payload for {}", messageId);
+                }
+                monitor.misses.increment();
+                return null;
+            }
+
+            String json = quorumConn.hget(messageStoreKey, messageId);
+            if (json == null) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Cannot get the message payload for {}", messageId);
+                }
+                monitor.misses.increment();
+                return null;
+            }
+
+            long added = quorumConn.zadd(unackQueueName, unackScore, messageId, zParams);
+            if (added == 0) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("cannot add {} to the unack shard {}", messageId, unackQueueName);
+                }
+                monitor.misses.increment();
+                return null;
+            }
+
+            long removed = quorumConn.zrem(myQueueShard, messageId);
+            if (removed == 0) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("cannot remove {} from the queue shard ", queueName, messageId);
+                }
+                monitor.misses.increment();
+                return null;
+            }
+
+            Message msg = om.readValue(json, Message.class);
+            return msg;
+        });
+
+    }
+
     @VisibleForTesting
     AtomicInteger prefetch = new AtomicInteger(0);
 
