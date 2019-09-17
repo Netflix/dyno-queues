@@ -1,6 +1,5 @@
 package com.netflix.dyno.queues.demo;
 
-import com.google.common.collect.ImmutableList;
 import com.netflix.dyno.demo.redis.DynoJedisDemo;
 import com.netflix.dyno.jedis.DynoJedisClient;
 import com.netflix.dyno.queues.DynoQueue;
@@ -11,10 +10,11 @@ import com.netflix.dyno.queues.shard.DynoShardSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Properties;
+import java.io.InputStream;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public class DynoQueueDemo extends DynoJedisDemo {
@@ -82,15 +82,23 @@ public class DynoQueueDemo extends DynoJedisDemo {
 
         RedisQueues queues = new RedisQueues(dyno, dyno, prefix, ss, 50_000, 50_000);
 
-        Message msg1 = new Message("id1", "searchable payload");
-        Message msg2 = new Message("id2", "payload 2");
-        Message msg3 = new Message("id3", "payload 3");
+        List<Message> payloads = new ArrayList<>();
+        payloads.add(new Message("id1", "searchable payload"));
+        payloads.add(new Message("id2", "payload 2"));
+        payloads.add(new Message("id3", "payload 3"));
+        payloads.add(new Message("id4", "payload 4"));
+        payloads.add(new Message("id5", "payload 5"));
+        payloads.add(new Message("id6", "payload 6"));
         DynoQueue V1Queue = queues.get("simpleQueue");
 
+        // Clear the queue in case the server already has the above key.
+        V1Queue.clear();
+
         // Test push() API
-        List pushed_msgs = V1Queue.push(ImmutableList.of(msg1, msg2, msg3));
+        List pushed_msgs = V1Queue.push(payloads);
 
         // Test ensure() API
+        Message msg1 = payloads.get(0);
         logger.info("Does Message with ID '" + msg1.getId() + "' already exist? -> " + !V1Queue.ensure(msg1));
 
         // Test containsPredicate() API
@@ -99,12 +107,23 @@ public class DynoQueueDemo extends DynoJedisDemo {
         // Test getMsgWithPredicate() API
         logger.info("Get MSG ID that contains 'searchable' in the queue -> " + V1Queue.getMsgWithPredicate("searchable"));
 
-        // Test pop()
-        List<Message> popped_msgs = V1Queue.pop(3, 1000, TimeUnit.MILLISECONDS);
+        List<Message> specific_pops = new ArrayList<>();
+        // We'd only be able to pop from the local shard, so try to pop the first payload ID we see in the local shard.
+        for (int i = 0; i < payloads.size(); ++i) {
+            Message popWithMsgId = V1Queue.popWithMsgId(payloads.get(i).getId());
+            if (popWithMsgId != null) {
+                specific_pops.add(popWithMsgId);
+                break;
+            }
+        }
 
         // Test ack()
-        boolean ack_successful = V1Queue.ack(popped_msgs.get(0).getId());
+        boolean ack_successful = V1Queue.ack(specific_pops.get(0).getId());
         assert(ack_successful);
+
+        // Test pop(). Even though we try to pop 3 messages, there will only be one remaining message in our local shard.
+        List<Message> popped_msgs = V1Queue.pop(3, 1000, TimeUnit.MILLISECONDS);
+        V1Queue.ack(popped_msgs.get(0).getId());
 
         V1Queue.clear();
         V1Queue.close();

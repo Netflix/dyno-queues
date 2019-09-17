@@ -63,6 +63,15 @@ public interface DynoQueue extends Closeable {
     public List<Message> pop(int messageCount, int wait, TimeUnit unit);
 
     /**
+     * Pops "messageId" from the local shard if it exists.
+     * Note that if "messageId" is present in a different shard, we will be unable to pop it.
+     *
+     * @param messageId ID of message to pop
+     * @return Returns a "Message" object if pop was successful. 'null' otherwise.
+     */
+    public Message popWithMsgId(String messageId);
+
+    /**
      * Provides a peek into the queue without taking messages out.
      * @param messageCount number of messages to be peeked.
      * @return List of peeked messages.
