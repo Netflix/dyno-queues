@@ -458,9 +458,10 @@ public class RedisDynoQueue implements DynoQueue {
 
                     String queueShardKey = getQueueShardKey(queueName, shard);
                     Long removed = quorumConn.zrem(queueShardKey, messageId);
-                    Long msgRemoved = quorumConn.hdel(messageStoreKey, messageId);
 
-                    if (removed > 0 && msgRemoved > 0) {
+                    if (removed > 0) {
+                        // Ignoring return value since we just want to get rid of it.
+                        Long msgRemoved = quorumConn.hdel(messageStoreKey, messageId);
                         return true;
                     }
                 }
