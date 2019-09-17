@@ -89,6 +89,9 @@ public class DynoQueueDemo extends DynoJedisDemo {
         payloads.add(new Message("id4", "payload 4"));
         payloads.add(new Message("id5", "payload 5"));
         payloads.add(new Message("id6", "payload 6"));
+        payloads.add(new Message("id7", "payload 7"));
+        payloads.add(new Message("id8", "payload 8"));
+        payloads.add(new Message("id9", "payload 9"));
         DynoQueue V1Queue = queues.get("simpleQueue");
 
         // Clear the queue in case the server already has the above key.
@@ -120,6 +123,10 @@ public class DynoQueueDemo extends DynoJedisDemo {
         // Test ack()
         boolean ack_successful = V1Queue.ack(specific_pops.get(0).getId());
         assert(ack_successful);
+
+        // Test remove()
+        boolean removed = V1Queue.remove("id9");
+        assert(removed);
 
         // Test pop(). Even though we try to pop 3 messages, there will only be one remaining message in our local shard.
         List<Message> popped_msgs = V1Queue.pop(3, 1000, TimeUnit.MILLISECONDS);
