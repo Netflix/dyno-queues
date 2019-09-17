@@ -129,6 +129,9 @@ public interface DynoQueue extends Closeable {
      * Checks the message bodies (i.e. the data in the hash map), and returns true on the first match with
      * 'predicate'.
      *
+     * Matching is done based on 'lua pattern' matching.
+     * http://lua-users.org/wiki/PatternsTutorial
+     *
      * Disclaimer: This is a potentially expensive call, since we will iterate over the entire hash map in the
      * worst case. Use mindfully.
      *
@@ -140,6 +143,9 @@ public interface DynoQueue extends Closeable {
     /**
      * Checks the message bodies (i.e. the data in the hash map), and returns the ID of the first message to match with
      * 'predicate'.
+     *
+     * Matching is done based on 'lua pattern' matching.
+     * http://lua-users.org/wiki/PatternsTutorial
      *
      * Disclaimer: This is a potentially expensive call, since we will iterate over the entire hash map in the
      * worst case. Use mindfully.

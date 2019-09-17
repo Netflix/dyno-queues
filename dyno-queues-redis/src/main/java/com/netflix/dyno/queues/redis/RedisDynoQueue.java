@@ -522,7 +522,7 @@ public class RedisDynoQueue implements DynoQueue {
                     "  for i, content in ipairs(ret[2]) do\n" +
                     "    if (i % 2 ~= 0) then\n" +
                     "      curmsgid = content\n" +
-                    "    elseif (string.find(content, predicate)) then\n" +
+                    "    elseif (string.match(content, predicate)) then\n" +
                     "      return curmsgid\n" +
                     "    end\n" +
                     "  end\n" +
