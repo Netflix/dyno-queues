@@ -83,7 +83,7 @@ public class DynoQueueDemo extends DynoJedisDemo {
         RedisQueues queues = new RedisQueues(dyno, dyno, prefix, ss, 50_000, 50_000);
 
         List<Message> payloads = new ArrayList<>();
-        payloads.add(new Message("id1", "searchable payload"));
+        payloads.add(new Message("id1", "searchable payload123"));
         payloads.add(new Message("id2", "payload 2"));
         payloads.add(new Message("id3", "payload 3"));
         payloads.add(new Message("id4", "payload 4"));
@@ -105,7 +105,7 @@ public class DynoQueueDemo extends DynoJedisDemo {
         logger.info("Does the predicate 'searchable' exist in  the queue? -> " + V1Queue.containsPredicate("searchable"));
 
         // Test getMsgWithPredicate() API
-        logger.info("Get MSG ID that contains 'searchable' in the queue -> " + V1Queue.getMsgWithPredicate("searchable"));
+        logger.info("Get MSG ID that contains 'searchable' in the queue -> " + V1Queue.getMsgWithPredicate("searchable pay*"));
 
         List<Message> specific_pops = new ArrayList<>();
         // We'd only be able to pop from the local shard, so try to pop the first payload ID we see in the local shard.
