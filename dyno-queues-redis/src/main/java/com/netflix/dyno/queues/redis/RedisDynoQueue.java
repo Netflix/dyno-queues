@@ -628,7 +628,7 @@ public class RedisDynoQueue implements DynoQueue {
 
         return execute("peekIds", myQueueShard, () -> {
             double now = Long.valueOf(clock.millis() + 1).doubleValue();
-            Set<String> scanned = quorumConn.zrangeByScore(myQueueShard, 0, now, offset, count);
+            Set<String> scanned = nonQuorumConn.zrangeByScore(myQueueShard, 0, now, offset, count);
             return scanned;
         });
 
