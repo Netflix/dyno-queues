@@ -650,11 +650,13 @@ public class RedisDynoQueue implements DynoQueue {
                 String unackQueueName = getUnackKey(queueName, shardName);
 
                 double now = Long.valueOf(clock.millis()).doubleValue();
+                int num_moved_back = 0;
+                int num_stale = 0;
 
                 Set<Tuple> unacks = quorumConn.zrangeByScoreWithScores(unackQueueName, 0, now, 0, batchSize);
 
                 if (unacks.size() > 0) {
-                    logger.debug("Adding " + unacks.size() + " messages back to the queue for " + queueName);
+                    logger.info("processUnacks: Adding " + unacks.size() + " messages back to shard of queue: " + unackQueueName);
                 }
 
                 for (Tuple unack : unacks) {
@@ -665,15 +667,21 @@ public class RedisDynoQueue implements DynoQueue {
                     String payload = quorumConn.hget(messageStoreKey, member);
                     if (payload == null) {
                         quorumConn.zrem(unackQueueName, member);
+                        ++num_stale;
                         continue;
                     }
 
-                    quorumConn.zadd(myQueueShard, score, member);
-                    quorumConn.zrem(unackQueueName, member);
+                    long added_back = quorumConn.zadd(myQueueShard, score, member);
+                    long removed_from_unack = quorumConn.zrem(unackQueueName, member);
+                    if (added_back > 0 && removed_from_unack > 0) ++num_moved_back;
                 }
+
+                logger.info("processUnacks: Moved back " + num_moved_back + " items. Got rid of " + num_stale + " stale items.");
                 return null;
             });
 
+        } catch (Exception e) {
+            logger.error("Error while processing unacks. " + e.getMessage());
         } finally {
             sw.stop();
         }
