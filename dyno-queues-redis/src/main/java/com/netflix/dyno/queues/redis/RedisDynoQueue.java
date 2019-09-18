@@ -653,7 +653,7 @@ public class RedisDynoQueue implements DynoQueue {
                 int num_moved_back = 0;
                 int num_stale = 0;
 
-                Set<Tuple> unacks = quorumConn.zrangeByScoreWithScores(unackQueueName, 0, now, 0, batchSize);
+                Set<Tuple> unacks = nonQuorumConn.zrangeByScoreWithScores(unackQueueName, 0, now, 0, batchSize);
 
                 if (unacks.size() > 0) {
                     logger.info("processUnacks: Adding " + unacks.size() + " messages back to shard of queue: " + unackQueueName);
