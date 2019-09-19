@@ -148,7 +148,7 @@ public class DynoQueueDemo extends DynoJedisDemo {
         }
 
         // Test unsafePopAllShards()
-        List<Message> pop_all_msgs = V1Queue.unsafePopAllShards(2, 1000, TimeUnit.MILLISECONDS);
+        List<Message> pop_all_msgs = V1Queue.unsafePopAllShards(7, 1000, TimeUnit.MILLISECONDS);
         for (Message msg : pop_all_msgs) {
             logger.info("Message popped (ID : payload) -> " + msg.getId() + " : " + msg.getPayload());
         }
