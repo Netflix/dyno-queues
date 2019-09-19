@@ -206,8 +206,7 @@ public interface DynoQueue extends Closeable {
 
 	/**
 	 * Provides a peek into all shards of the queue without taking messages out.
-	 * Note: The local shard will always be looked into first and other shards will be filled behind it (if 'messageCount' is
-	 * greater than the number of elements in the local shard). This way we ensure the chances of duplicates are less.
+	 * Note: This function does not guarantee ordering of items based on shards like unsafePopAllShards().
 	 *
 	 * @param count The number of messages to peek.
 	 * @return A list of up to 'count' messages.
