@@ -92,6 +92,12 @@ public class DynoQueueDemo extends DynoJedisDemo {
         payloads.add(new Message("id7", "payload 7"));
         payloads.add(new Message("id8", "payload 8"));
         payloads.add(new Message("id9", "payload 9"));
+        payloads.add(new Message("id10", "payload 10"));
+        payloads.add(new Message("id11", "payload 11"));
+        payloads.add(new Message("id12", "payload 12"));
+        payloads.add(new Message("id13", "payload 13"));
+        payloads.add(new Message("id14", "payload 14"));
+        payloads.add(new Message("id15", "payload 15"));
 
         DynoQueue V1Queue = queues.get("simpleQueue");
 
@@ -132,7 +138,7 @@ public class DynoQueueDemo extends DynoJedisDemo {
         assert(removed);
 
         // Test pop(). Even though we try to pop 3 messages, there will only be one remaining message in our local shard.
-        List<Message> popped_msgs = V1Queue.pop(3, 1000, TimeUnit.MILLISECONDS);
+        List<Message> popped_msgs = V1Queue.pop(1, 1000, TimeUnit.MILLISECONDS);
         V1Queue.ack(popped_msgs.get(0).getId());
 
         // Test unsafePeekAllShards()

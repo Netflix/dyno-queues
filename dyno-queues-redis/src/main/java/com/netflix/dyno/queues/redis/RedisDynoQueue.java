@@ -421,7 +421,7 @@ public class RedisDynoQueue implements DynoQueue {
             int remainingCount = messageCount;
             // Pop as much as possible from the local shard first to reduce chances of returning duplicate items.
             // (See unsafe* functions disclaimer in DynoQueue.java)
-            List<Message> popped = _pop(shardName, remainingCount, prefetchedIds);
+            List<Message> popped = _pop(shardName, remainingCount, unsafePrefetchedIdsAllShardsMap.get(localQueueShard));
             remainingCount -= popped.size();
 
             for (String shard : allShards) {
