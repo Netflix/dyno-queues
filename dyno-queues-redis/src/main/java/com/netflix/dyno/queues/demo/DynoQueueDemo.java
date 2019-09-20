@@ -6,7 +6,7 @@ import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.Message;
 import com.netflix.dyno.queues.redis.RedisQueues;
 import com.netflix.dyno.queues.redis.v2.QueueBuilder;
-import com.netflix.dyno.queues.shard.DynoShardSupplier;
+import com.netflix.dyno.queues.shard.ConsistentAWSDynoShardSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,7 +78,7 @@ public class DynoQueueDemo extends DynoJedisDemo {
 
         String prefix = "dynoQueue_";
 
-        DynoShardSupplier ss = new DynoShardSupplier(dyno.getConnPool().getConfiguration().getHostSupplier(), region, localRack);
+        ConsistentAWSDynoShardSupplier ss = new ConsistentAWSDynoShardSupplier(dyno.getConnPool().getConfiguration().getHostSupplier(), region, localRack);
 
         RedisQueues queues = new RedisQueues(dyno, dyno, prefix, ss, 50_000, 50_000);
 
