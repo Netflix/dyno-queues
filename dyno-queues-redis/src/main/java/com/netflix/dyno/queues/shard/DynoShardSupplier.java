@@ -29,7 +29,11 @@ import java.util.stream.Collectors;
 /**
  * @author Viren
  *
+ * NOTE: This class is deprecated and should not be used. It still remains for backwards compatibility for legacy applications
+ * New applications must use 'ConsistentAWSDynoShardSupplier' or extend 'ConsistentDynoShardSupplier' for non-AWS environments.
+ *
  */
+@Deprecated
 public class DynoShardSupplier implements ShardSupplier {
 
     private HostSupplier hs;
