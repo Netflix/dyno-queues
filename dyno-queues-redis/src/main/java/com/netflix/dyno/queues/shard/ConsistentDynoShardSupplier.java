@@ -10,7 +10,7 @@ abstract class ConsistentDynoShardSupplier implements ShardSupplier {
 
     protected HostSupplier hs;
 
-    protected  String region;
+    protected String region;
 
     protected String localRack;
 

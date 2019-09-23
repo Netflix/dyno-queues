@@ -117,6 +117,11 @@ public class DynoQueueDemo extends DynoJedisDemo {
         // Test getMsgWithPredicate() API
         logger.info("Get MSG ID that contains 'searchable' in the queue -> " + V1Queue.getMsgWithPredicate("searchable pay*"));
 
+        // Test getMsgWithPredicate(predicate, localShardOnly=true) API
+        // NOTE: This only works on single ring sized Dynomite clusters.
+        logger.info("Get MSG ID that contains 'searchable' in the queue -> " + V1Queue.getMsgWithPredicate("searchable pay*", true));
+        logger.info("Get MSG ID that contains '3' in the queue -> " + V1Queue.getMsgWithPredicate("3", true));
+
         List<Message> specific_pops = new ArrayList<>();
         // We'd only be able to pop from the local shard, so try to pop the first payload ID we see in the local shard.
         for (int i = 0; i < payloads.size(); ++i) {

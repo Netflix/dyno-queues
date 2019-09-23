@@ -706,13 +706,24 @@ public class RedisDynoQueue implements DynoQueue {
         });
     }
 
+
     @Override
     public boolean containsPredicate(String predicate) {
-        return execute("containsPredicate", messageStoreKey, () -> getMsgWithPredicate(predicate) != null);
+        return containsPredicate(predicate, false);
     }
 
     @Override
     public String getMsgWithPredicate(String predicate) {
+        return getMsgWithPredicate(predicate, false);
+    }
+
+    @Override
+    public boolean containsPredicate(String predicate, boolean localShardOnly) {
+        return execute("containsPredicate", messageStoreKey, () -> getMsgWithPredicate(predicate, localShardOnly) != null);
+    }
+
+    @Override
+    public String getMsgWithPredicate(String predicate, boolean localShardOnly) {
         return execute("getMsgWithPredicate", messageStoreKey, () -> {
 
             // We use a Lua script here to do predicate matching since we only want to find whether the predicate
@@ -721,7 +732,7 @@ public class RedisDynoQueue implements DynoQueue {
             // The alternative is to have the server return all the hash values back to us and we filter it here on
             // the client side. This is not desirable since we would potentially be sending large amounts of data
             // over the network only to return a single string value back to the calling application.
-            String predicateCheckLuaScript = "local hkey=KEYS[1]\n" +
+            String predicateCheckAllLuaScript = "local hkey=KEYS[1]\n" +
                     "local predicate=ARGV[1]\n" +
                     "local cursor=0\n" +
                     "local begin=false\n" +
@@ -740,9 +751,39 @@ public class RedisDynoQueue implements DynoQueue {
                     "end\n" +
                     "return nil";
 
-            // Cast from 'JedisCommands' to 'DynoJedisClient' here since the former does not expose 'eval()'.
-            String retval = (String) ((DynoJedisClient) nonQuorumConn).eval(predicateCheckLuaScript,
-                    Collections.singletonList(messageStoreKey), Collections.singletonList(predicate));
+            String predicateCheckLocalOnlyLuaScript = "local hkey=KEYS[1]\n" +
+                    "local predicate=ARGV[1]\n" +
+                    "local shard_name=ARGV[2]\n" +
+                    "local cursor=0\n" +
+                    "local begin=false\n" +
+                    "while (cursor ~= 0 or begin==false) do\n" +
+                    "    local ret = redis.call('hscan', hkey, cursor)\n" +
+                    "local curmsgid\n" +
+                    "for i, content in ipairs(ret[2]) do\n" +
+                    "    if (i % 2 ~= 0) then\n" +
+                    "        curmsgid = content\n" +
+                    "elseif (string.match(content, predicate)) then\n" +
+                    "local in_local_shard = redis.call('zrank', shard_name, curmsgid)\n" +
+                    "if (type(in_local_shard) ~= 'boolean' and in_local_shard >= 0) then\n" +
+                    "return curmsgid\n" +
+                    "end\n" +
+                    "        end\n" +
+                    "end\n" +
+                    "        cursor=tonumber(ret[1])\n" +
+                    "begin=true\n" +
+                    "end\n" +
+                    "return nil";
+
+            String retval;
+            if (localShardOnly) {
+                // Cast from 'JedisCommands' to 'DynoJedisClient' here since the former does not expose 'eval()'.
+                retval = (String) ((DynoJedisClient) nonQuorumConn).eval(predicateCheckLocalOnlyLuaScript,
+                        Collections.singletonList(messageStoreKey), ImmutableList.of(predicate, localQueueShard));
+            } else {
+                // Cast from 'JedisCommands' to 'DynoJedisClient' here since the former does not expose 'eval()'.
+                retval = (String) ((DynoJedisClient) nonQuorumConn).eval(predicateCheckAllLuaScript,
+                        Collections.singletonList(messageStoreKey), Collections.singletonList(predicate));
+            }
 
             return retval;
         });

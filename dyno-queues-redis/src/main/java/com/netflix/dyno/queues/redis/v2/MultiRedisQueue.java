@@ -151,13 +151,24 @@ public class MultiRedisQueue implements DynoQueue {
         throw new UnsupportedOperationException();
     }
 
+
     @Override
     public boolean containsPredicate(String predicate) {
-        throw new UnsupportedOperationException();
+        return containsPredicate(predicate, false);
     }
 
     @Override
     public String getMsgWithPredicate(String predicate) {
+        return getMsgWithPredicate(predicate, false);
+    }
+
+    @Override
+    public boolean containsPredicate(String predicate, boolean localShardOnly) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public String getMsgWithPredicate(String predicate, boolean localShardOnly) {
         throw new UnsupportedOperationException();
     }
 

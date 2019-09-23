@@ -141,9 +141,13 @@ public interface DynoQueue extends Closeable {
      * worst case. Use mindfully.
      *
      * @param predicate The predicate to check against.
+     * @param localShardOnly If this is true, it will only check if the message exists in the local shard as opposed to
+     *                       all shards. Note that this will only work if the Dynomite cluster ring size is 1 (i.e. one
+     *                       instance per AZ).
      * @return 'true' if any of the messages contain 'predicate'; 'false' otherwise.
      */
     public boolean containsPredicate(String predicate);
+    public boolean containsPredicate(String predicate, boolean localShardOnly);
 
     /**
      * Checks the message bodies (i.e. the data in the hash map), and returns the ID of the first message to match with
@@ -156,9 +160,13 @@ public interface DynoQueue extends Closeable {
      * worst case. Use mindfully.
      *
      * @param predicate The predicate to check against.
+     * @param localShardOnly If this is true, it will only check if the message exists in the local shard as opposed to
+     *                       all shards. Note that this will only work if the Dynomite cluster ring size is 1 (i.e. one
+     *                       instance per AZ).
      * @return Message ID as string if any of the messages contain 'predicate'; 'null' otherwise.
      */
     public String getMsgWithPredicate(String predicate);
+    public String getMsgWithPredicate(String predicate, boolean localShardOnly);
 
     /**
      *
