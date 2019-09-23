@@ -348,15 +348,29 @@ public class RedisDynoQueue implements DynoQueue {
 
     @Override
     public Message popWithMsgId(String messageId) {
+        return popWithMsgIdHelper(messageId, shardName);
+    }
 
-        return execute("popWithMsgId", localQueueShard, () -> {
+    @Override
+    public Message unsafePopWithMsgIdAllShards(String messageId) {
+        for (String shard : allShards) {
+            Message msg = popWithMsgIdHelper(messageId, shard);
+            if (msg != null) return msg;
+        }
+        return null;
+    }
+
+    public Message popWithMsgIdHelper(String messageId, String targetShard) {
+
+        return execute("popWithMsgId", targetShard, () -> {
+            String queueShardName = getQueueShardKey(queueName, targetShard);
             double unackScore = Long.valueOf(clock.millis() + unackTime).doubleValue();
-            String unackShardName = getUnackKey(queueName, shardName);
+            String unackShardName = getUnackKey(queueName, targetShard);
 
             ZAddParams zParams = ZAddParams.zAddParams().nx();
 
             try {
-                long exists = nonQuorumConn.zrank(localQueueShard, messageId);
+                long exists = nonQuorumConn.zrank(queueShardName, messageId);
                 // If an exception wasn't thrown, the element has to exist.
                 assert(exists >= 0);
             } catch (NullPointerException e) {
@@ -386,7 +400,7 @@ public class RedisDynoQueue implements DynoQueue {
                 return null;
             }
 
-            long removed = quorumConn.zrem(localQueueShard, messageId);
+            long removed = quorumConn.zrem(queueShardName, messageId);
             if (removed == 0) {
                 if (logger.isDebugEnabled()) {
                     logger.debug("cannot remove {} from the queue shard ", queueName, messageId);

@@ -249,6 +249,12 @@ public class RedisPipelineQueue implements DynoQueue {
     public Message popWithMsgId(String messageId) {
         throw new UnsupportedOperationException();
     }
+
+    @Override
+    public Message unsafePopWithMsgIdAllShards(String messageId) {
+        throw new UnsupportedOperationException();
+    }
+
     private List<Message> _pop(List<String> batch) throws Exception {
 
         double unackScore = Long.valueOf(clock.millis() + unackTime).doubleValue();
