@@ -240,4 +240,14 @@ public interface DynoQueue extends Closeable {
 	 *
 	 */
 	public List<Message> unsafePopAllShards(int messageCount, int wait, TimeUnit unit);
+
+
+	/**
+	 * Same as popWithMsgId(), but allows popping from any shard.
+	 *
+	 * @param messageId ID of message to pop
+	 * @return Returns a "Message" object if pop was successful. 'null' otherwise.
+	 */
+	public Message unsafePopWithMsgIdAllShards(String messageId);
+
 }

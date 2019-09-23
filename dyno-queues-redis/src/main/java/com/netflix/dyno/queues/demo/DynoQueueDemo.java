@@ -123,12 +123,20 @@ public class DynoQueueDemo extends DynoJedisDemo {
         logger.info("Get MSG ID that contains '3' in the queue -> " + V1Queue.getMsgWithPredicate("3", true));
 
         List<Message> specific_pops = new ArrayList<>();
-        // We'd only be able to pop from the local shard, so try to pop the first payload ID we see in the local shard.
+        // We'd only be able to pop from the local shard with popWithMsgId(), so try to pop the first payload ID we see in the local shard.
+        // Until then pop all messages not in the local shard with unsafePopWithMsgIdAllShards().
         for (int i = 0; i < payloads.size(); ++i) {
             Message popWithMsgId = V1Queue.popWithMsgId(payloads.get(i).getId());
             if (popWithMsgId != null) {
                 specific_pops.add(popWithMsgId);
                 break;
+            } else {
+                // If we were unable to pop using popWithMsgId(), that means the message ID does not exist in the local shard.
+                // Ensure that we can pop with unsafePopWithMsgIdAllShards().
+                Message unsafeSpecificPop = V1Queue.unsafePopWithMsgIdAllShards(payloads.get(i).getId());
+                assert(unsafeSpecificPop != null);
+                boolean ack = V1Queue.ack(unsafeSpecificPop.getId());
+                assert(ack);
             }
         }
 
@@ -156,6 +164,8 @@ public class DynoQueueDemo extends DynoJedisDemo {
         List<Message> pop_all_msgs = V1Queue.unsafePopAllShards(7, 1000, TimeUnit.MILLISECONDS);
         for (Message msg : pop_all_msgs) {
             logger.info("Message popped (ID : payload) -> " + msg.getId() + " : " + msg.getPayload());
+            boolean ack = V1Queue.ack(msg.getId());
+            assert(ack);
         }
 
         V1Queue.clear();
