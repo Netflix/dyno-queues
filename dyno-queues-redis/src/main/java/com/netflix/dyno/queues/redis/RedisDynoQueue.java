@@ -376,7 +376,7 @@ public class RedisDynoQueue implements DynoQueue {
             } catch (NullPointerException e) {
                 // If we get a NPE, that means "messageId" does not exist in the sorted set.
                 if (logger.isDebugEnabled()) {
-                    logger.debug("Cannot get the message payload for {}", messageId);
+                    logger.debug("Cannot find the message with ID {}", messageId);
                 }
                 monitor.misses.increment();
                 return null;
