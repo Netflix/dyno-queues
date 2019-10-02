@@ -369,12 +369,9 @@ public class RedisDynoQueue implements DynoQueue {
 
             ZAddParams zParams = ZAddParams.zAddParams().nx();
 
-            try {
-                long exists = nonQuorumConn.zrank(queueShardName, messageId);
-                // If an exception wasn't thrown, the element has to exist.
-                assert(exists >= 0);
-            } catch (NullPointerException e) {
-                // If we get a NPE, that means "messageId" does not exist in the sorted set.
+            Long exists = nonQuorumConn.zrank(queueShardName, messageId);
+            // If we get back a null type, then the element doesn't exist.
+            if (exists == null) {
                 if (logger.isDebugEnabled()) {
                     logger.debug("Cannot find the message with ID {}", messageId);
                 }
