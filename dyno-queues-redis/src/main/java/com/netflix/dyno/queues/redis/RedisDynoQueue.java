@@ -372,36 +372,28 @@ public class RedisDynoQueue implements DynoQueue {
             Long exists = nonQuorumConn.zrank(queueShardName, messageId);
             // If we get back a null type, then the element doesn't exist.
             if (exists == null) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Cannot find the message with ID {}", messageId);
-                }
+                logger.warn("Cannot find the message with ID {}", messageId);
                 monitor.misses.increment();
                 return null;
             }
 
             String json = quorumConn.hget(messageStoreKey, messageId);
             if (json == null) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Cannot get the message payload for {}", messageId);
-                }
+                logger.warn("Cannot get the message payload for {}", messageId);
                 monitor.misses.increment();
                 return null;
             }
 
             long added = quorumConn.zadd(unackShardName, unackScore, messageId, zParams);
             if (added == 0) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("cannot add {} to the unack shard {}", messageId, unackShardName);
-                }
+                logger.warn("cannot add {} to the unack shard {}", messageId, unackShardName);
                 monitor.misses.increment();
                 return null;
             }
 
             long removed = quorumConn.zrem(queueShardName, messageId);
             if (removed == 0) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("cannot remove {} from the queue shard ", queueName, messageId);
-                }
+                logger.warn("cannot remove {} from the queue shard ", queueName, messageId);
                 monitor.misses.increment();
                 return null;
             }
@@ -541,27 +533,21 @@ public class RedisDynoQueue implements DynoQueue {
 
             long added = quorumConn.zadd(unackShardName, unackScore, msgId, zParams);
             if(added == 0){
-                if (logger.isDebugEnabled()) {
-                    logger.debug("cannot add {} to the unack shard {}", msgId, unackShardName);
-                }
+                logger.warn("cannot add {} to the unack shard {}", msgId, unackShardName);
                 monitor.misses.increment();
                 continue;
             }
 
             long removed = quorumConn.zrem(queueShardName, msgId);
             if (removed == 0) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("cannot remove {} from the queue shard {}", msgId, queueShardName);
-                }
+                logger.warn("cannot remove {} from the queue shard {}", msgId, queueShardName);
                 monitor.misses.increment();
                 continue;
             }
 
             String json = quorumConn.hget(messageStoreKey, msgId);
             if (json == null) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Cannot get the message payload for {}", msgId);
-                }
+                logger.warn("Cannot get the message payload for {}", msgId);
                 monitor.misses.increment();
                 continue;
             }
@@ -810,9 +796,7 @@ public class RedisDynoQueue implements DynoQueue {
             return execute("get", messageStoreKey, () -> {
                 String json = quorumConn.hget(messageStoreKey, messageId);
                 if (json == null) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("Cannot get the message payload " + messageId);
-                    }
+                    logger.warn("Cannot get the message payload " + messageId);
                     return null;
                 }
 
@@ -906,7 +890,7 @@ public class RedisDynoQueue implements DynoQueue {
                 Set<Tuple> unacks = nonQuorumConn.zrangeByScoreWithScores(unackShardName, 0, now, 0, batchSize);
 
                 if (unacks.size() > 0) {
-                    logger.info("processUnacks: Adding " + unacks.size() + " messages back to shard of queue: " + unackShardName);
+                    logger.info("processUnacks: Attempting to add " + unacks.size() + " messages back to shard of queue: " + unackShardName);
                 }
 
                 for (Tuple unack : unacks) {
@@ -926,7 +910,9 @@ public class RedisDynoQueue implements DynoQueue {
                     if (added_back > 0 && removed_from_unack > 0) ++num_moved_back;
                 }
 
-                logger.info("processUnacks: Moved back " + num_moved_back + " items. Got rid of " + num_stale + " stale items.");
+                if (num_moved_back > 0 || num_stale > 0) {
+                    logger.info("processUnacks: Moved back " + num_moved_back + " items. Got rid of " + num_stale + " stale items.");
+                }
                 return null;
             });
 
