@@ -362,45 +362,52 @@ public class RedisDynoQueue implements DynoQueue {
 
     public Message popWithMsgIdHelper(String messageId, String targetShard) {
 
-        return execute("popWithMsgId", targetShard, () -> {
-            String queueShardName = getQueueShardKey(queueName, targetShard);
-            double unackScore = Long.valueOf(clock.millis() + unackTime).doubleValue();
-            String unackShardName = getUnackKey(queueName, targetShard);
+        Stopwatch sw = monitor.start(monitor.pop, 1);
 
-            ZAddParams zParams = ZAddParams.zAddParams().nx();
+        try {
+            return execute("popWithMsgId", targetShard, () -> {
 
-            Long exists = nonQuorumConn.zrank(queueShardName, messageId);
-            // If we get back a null type, then the element doesn't exist.
-            if (exists == null) {
-                logger.warn("Cannot find the message with ID {}", messageId);
-                monitor.misses.increment();
-                return null;
-            }
+                String queueShardName = getQueueShardKey(queueName, targetShard);
+                double unackScore = Long.valueOf(clock.millis() + unackTime).doubleValue();
+                String unackShardName = getUnackKey(queueName, targetShard);
 
-            String json = quorumConn.hget(messageStoreKey, messageId);
-            if (json == null) {
-                logger.warn("Cannot get the message payload for {}", messageId);
-                monitor.misses.increment();
-                return null;
-            }
+                ZAddParams zParams = ZAddParams.zAddParams().nx();
 
-            long added = quorumConn.zadd(unackShardName, unackScore, messageId, zParams);
-            if (added == 0) {
-                logger.warn("cannot add {} to the unack shard {}", messageId, unackShardName);
-                monitor.misses.increment();
-                return null;
-            }
+                Long exists = nonQuorumConn.zrank(queueShardName, messageId);
+                // If we get back a null type, then the element doesn't exist.
+                if (exists == null) {
+                    logger.warn("Cannot find the message with ID {}", messageId);
+                    monitor.misses.increment();
+                    return null;
+                }
 
-            long removed = quorumConn.zrem(queueShardName, messageId);
-            if (removed == 0) {
-                logger.warn("cannot remove {} from the queue shard ", queueName, messageId);
-                monitor.misses.increment();
-                return null;
-            }
+                String json = quorumConn.hget(messageStoreKey, messageId);
+                if (json == null) {
+                    logger.warn("Cannot get the message payload for {}", messageId);
+                    monitor.misses.increment();
+                    return null;
+                }
 
-            Message msg = om.readValue(json, Message.class);
-            return msg;
-        });
+                long added = quorumConn.zadd(unackShardName, unackScore, messageId, zParams);
+                if (added == 0) {
+                    logger.warn("cannot add {} to the unack shard {}", messageId, unackShardName);
+                    monitor.misses.increment();
+                    return null;
+                }
+
+                long removed = quorumConn.zrem(queueShardName, messageId);
+                if (removed == 0) {
+                    logger.warn("cannot remove {} from the queue shard ", queueName, messageId);
+                    monitor.misses.increment();
+                    return null;
+                }
+
+                Message msg = om.readValue(json, Message.class);
+                return msg;
+            });
+        } finally {
+            sw.stop();
+        }
 
     }
 
