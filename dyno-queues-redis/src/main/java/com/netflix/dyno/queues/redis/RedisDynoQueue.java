@@ -348,19 +348,27 @@ public class RedisDynoQueue implements DynoQueue {
 
     @Override
     public Message popWithMsgId(String messageId) {
-        return popWithMsgIdHelper(messageId, shardName);
+        return popWithMsgIdHelper(messageId, shardName, true);
     }
 
     @Override
     public Message unsafePopWithMsgIdAllShards(String messageId) {
+        int numShards = allShards.size();
         for (String shard : allShards) {
-            Message msg = popWithMsgIdHelper(messageId, shard);
+            boolean warnIfNotExists = false;
+
+            // Only one of the shards will have the message, so we don't want the check in the other 2 shards
+            // to spam the logs. So make sure only the last shard emits a warning log which means that none of the
+            // shards have 'messageId'.
+            if (--numShards == 0) warnIfNotExists = true;
+
+            Message msg = popWithMsgIdHelper(messageId, shard, warnIfNotExists);
             if (msg != null) return msg;
         }
         return null;
     }
 
-    public Message popWithMsgIdHelper(String messageId, String targetShard) {
+    public Message popWithMsgIdHelper(String messageId, String targetShard, boolean warnIfNotExists) {
 
         Stopwatch sw = monitor.start(monitor.pop, 1);
 
@@ -376,7 +384,13 @@ public class RedisDynoQueue implements DynoQueue {
                 Long exists = nonQuorumConn.zrank(queueShardName, messageId);
                 // If we get back a null type, then the element doesn't exist.
                 if (exists == null) {
-                    logger.warn("Cannot find the message with ID {}", messageId);
+                    // We only have a 'warnIfNotExists' check for this call since not all messages are present in
+                    // all shards. So we want to avoid a log spam. If any of the following calls return 'null' or '0',
+                    // we may have hit an inconsistency (because it's in the queue, but other calls have failed),
+                    // so make sure to log those.
+                    if (warnIfNotExists) {
+                        logger.warn("Cannot find the message with ID {}", messageId);
+                    }
                     monitor.misses.increment();
                     return null;
                 }
