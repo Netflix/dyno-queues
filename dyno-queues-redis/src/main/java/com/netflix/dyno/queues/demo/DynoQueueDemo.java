@@ -72,6 +72,7 @@ public class DynoQueueDemo extends DynoJedisDemo {
         }
     }
 
+
     private void runSimpleV1Demo(DynoJedisClient dyno) throws IOException {
         String region = System.getProperty("LOCAL_DATACENTER");
         String localRack = System.getProperty("LOCAL_RACK");
@@ -122,10 +123,13 @@ public class DynoQueueDemo extends DynoJedisDemo {
         logger.info("Get MSG ID that contains 'searchable' in the queue -> " + V1Queue.getMsgWithPredicate("searchable pay*", true));
         logger.info("Get MSG ID that contains '3' in the queue -> " + V1Queue.getMsgWithPredicate("3", true));
 
+        Message poppedWithPredicate = V1Queue.popMsgWithPredicate("searchable pay*", false);
+        V1Queue.ack(poppedWithPredicate.getId());
+
         List<Message> specific_pops = new ArrayList<>();
         // We'd only be able to pop from the local shard with popWithMsgId(), so try to pop the first payload ID we see in the local shard.
         // Until then pop all messages not in the local shard with unsafePopWithMsgIdAllShards().
-        for (int i = 0; i < payloads.size(); ++i) {
+        for (int i = 1; i < payloads.size(); ++i) {
             Message popWithMsgId = V1Queue.popWithMsgId(payloads.get(i).getId());
             if (popWithMsgId != null) {
                 specific_pops.add(popWithMsgId);

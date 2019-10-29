@@ -168,6 +168,17 @@ public interface DynoQueue extends Closeable {
     public String getMsgWithPredicate(String predicate);
     public String getMsgWithPredicate(String predicate, boolean localShardOnly);
 
+	/**
+	 * Same as getMsgWithPredicate(), but it also pops the item if found.
+	 *
+	 * @param predicate The predicate to check against.
+	 * @param localShardOnly If this is true, it will only check if the message exists in the local shard as opposed to
+	 *                       all shards. Note that this will only work if the Dynomite cluster ring size is 1 (i.e. one
+	 *                       instance per AZ).
+	 * @return
+	 */
+	public Message popMsgWithPredicate(String predicate, boolean localShardOnly);
+
     /**
      *
      * @param messageId message to be retrieved.
