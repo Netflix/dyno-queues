@@ -31,6 +31,7 @@ import redis.clients.jedis.commands.JedisCommands;
 import redis.clients.jedis.params.ZAddParams;
 
 import java.io.IOException;
+import java.text.NumberFormat;
 import java.time.Clock;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -805,6 +806,100 @@ public class RedisDynoQueue implements DynoQueue {
 
             return retval;
         });
+    }
+
+    /**
+     *
+     * Similar to popWithMsgId() but completes all the operations in one round trip.
+     *
+     * NOTE: This function assumes that the ring size in the cluster is 1. DO NOT use for APIs that support a ring
+     * size larger than 1.
+     *
+     * @param messageId
+     * @param localShardOnly
+     * @return
+     */
+    private String atomicPopWithMsgIdHelper(String messageId, boolean localShardOnly) {
+
+        double now = Long.valueOf(clock.millis() + 1).doubleValue();
+        double unackScore = Long.valueOf(clock.millis() + unackTime).doubleValue();
+
+        // The script requires the scores as whole numbers
+        NumberFormat fmt = NumberFormat.getIntegerInstance();
+        fmt.setGroupingUsed(false);
+        String nowScoreString = fmt.format(now);
+        String unackScoreString = fmt.format(unackScore);
+
+        String atomicPopScript = "local hkey=KEYS[1]\n" +
+                "local message_id=ARGV[1]\n" +
+                "local num_shards=ARGV[2]\n" +
+                "local peek_until=ARGV[3]\n" +
+                "local unack_score=ARGV[4]\n" +
+                "for i=0,num_shards-1 do\n" +
+                "  local queue_shard_name=ARGV[(i*2)+5]\n" +
+                "  local unack_shard_name=ARGV[(i*2)+5+1]\n" +
+                "  local exists = redis.call('zscore', queue_shard_name, message_id)\n" +
+                "  if (exists) then\n" +
+                "    if (exists <= peek_until) then\n" +
+                "      local value = redis.call('hget', hkey, message_id)\n" +
+                "      if (value) then\n" +
+                "        local zadd_ret = redis.call('zadd', unack_shard_name, 'NX', unack_score, message_id )\n" +
+                "        if (zadd_ret) then\n" +
+                "          redis.call('zrem', queue_shard_name, message_id)\n" +
+                "          return value\n" +
+                "        end\n" +
+                "      end\n" +
+                "    end\n" +
+                "  end\n" +
+                "end\n" +
+                "return nil";
+
+        String retval;
+        if (localShardOnly) {
+            String unackShardName = getUnackKey(queueName, shardName);
+
+            retval = (String) ((DynoJedisClient) quorumConn).eval(atomicPopScript, Collections.singletonList(messageStoreKey),
+                    ImmutableList.of(messageId, Integer.toString(1), nowScoreString,
+                            unackScoreString, localQueueShard, unackShardName));
+        } else {
+            int numShards = allShards.size();
+            ImmutableList.Builder builder = ImmutableList.builder();
+            builder.add(messageId);
+            builder.add(Integer.toString(numShards));
+            builder.add(nowScoreString);
+            builder.add(unackScoreString);
+
+            List<String> arguments = Arrays.asList(messageId, Integer.toString(numShards), nowScoreString,
+                    unackScoreString);
+            for (String shard : allShards) {
+                String queueShard = getQueueShardKey(queueName, shard);
+                String unackShardName = getUnackKey(queueName, shard);
+                builder.add(queueShard);
+                builder.add(unackShardName);
+            }
+            retval = (String) ((DynoJedisClient) quorumConn).eval(atomicPopScript, Collections.singletonList(messageStoreKey), builder.build());
+        }
+
+        return retval;
+    }
+
+    @Override
+    public Message popMsgWithPredicate(String predicate, boolean localShardOnly) {
+        Stopwatch sw = monitor.get.start();
+
+        try {
+            String messageId = getMsgWithPredicate(predicate, localShardOnly);
+            if (messageId == null) {
+                return null;
+            }
+            String payload = execute("atomicPop", messageStoreKey, () -> atomicPopWithMsgIdHelper(messageId, localShardOnly));
+
+            return new Message(messageId, payload);
+
+        } finally {
+            sw.stop();
+        }
+
     }
 
     @Override
