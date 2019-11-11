@@ -184,6 +184,11 @@ public class MultiRedisQueue implements DynoQueue {
     }
 
     @Override
+    public List<Message> bulkPop(int messageCount, int wait, TimeUnit unit) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public Message get(String messageId) {
         for (DynoQueue q : queues.values()) {
             Message msg = q.get(messageId);

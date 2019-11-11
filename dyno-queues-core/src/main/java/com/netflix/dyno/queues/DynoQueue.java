@@ -186,6 +186,8 @@ public interface DynoQueue extends Closeable {
      */
     public Message get(String messageId);
 
+    public List<Message> bulkPop(int messageCount, int wait, TimeUnit unit);
+
     /**
      *
      * @return Size of the queue.
