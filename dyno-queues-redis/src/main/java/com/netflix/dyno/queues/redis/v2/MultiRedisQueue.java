@@ -189,6 +189,11 @@ public class MultiRedisQueue implements DynoQueue {
     }
 
     @Override
+    public List<Message> unsafeBulkPop(int messageCount, int wait, TimeUnit unit) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public Message get(String messageId) {
         for (DynoQueue q : queues.values()) {
             Message msg = q.get(messageId);
@@ -197,6 +202,11 @@ public class MultiRedisQueue implements DynoQueue {
             }
         }
         return null;
+    }
+
+    @Override
+    public Message localGet(String messageId) {
+        throw new UnsupportedOperationException();
     }
 
     @Override

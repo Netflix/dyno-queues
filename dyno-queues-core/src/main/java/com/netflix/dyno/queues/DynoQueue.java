@@ -186,7 +186,16 @@ public interface DynoQueue extends Closeable {
      */
     public Message get(String messageId);
 
+	/**
+	 *
+	 * Same as get(), but uses the non quorum connection.
+	 * @param messageId message to be retrieved.
+	 * @return Retrieves the message stored in the queue by the messageId.  Null if not found.
+	 */
+	public Message localGet(String messageId);
+
     public List<Message> bulkPop(int messageCount, int wait, TimeUnit unit);
+	public List<Message> unsafeBulkPop(int messageCount, int wait, TimeUnit unit);
 
     /**
      *
