@@ -519,6 +519,7 @@ public class RedisDynoQueue implements DynoQueue {
             // Attempt to peek up to 'numToPrefetch' message Ids.
             Set<String> ids = doPeekIdsFromShardHelper(queueShardName, prefetchFromTs, 0, numToPrefetch);
 
+            // TODO: Check for duplicates.
             // Store prefetched IDs in a queue.
             prefetchedIdQueue.addAll(ids);
 
@@ -826,7 +827,8 @@ public class RedisDynoQueue implements DynoQueue {
                 Uninterruptibles.sleepUninterruptibly(200, TimeUnit.MILLISECONDS);
                 prefetchIds();
             }
-            return atomicBulkPopHelper(shardName, messageCount, prefetchedIds);
+            int numToPop = (prefetchedIds.size() > messageCount) ? messageCount : prefetchedIds.size();
+            return atomicBulkPopHelper(numToPop, prefetchedIds, true);
 
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -836,8 +838,47 @@ public class RedisDynoQueue implements DynoQueue {
 
     }
 
-    private List<Message> atomicBulkPopHelper(String shard, int messageCount,
-                          ConcurrentLinkedQueue<String> prefetchedIdQueue) {
+    @Override
+    public List<Message> unsafeBulkPop(int messageCount, int wait, TimeUnit unit) {
+        if (messageCount < 1) {
+            return Collections.emptyList();
+        }
+
+        Stopwatch sw = monitor.start(monitor.pop, messageCount);
+        try {
+            long start = clock.millis();
+            long waitFor = unit.toMillis(wait);
+            unsafeNumIdsToPrefetchAllShards.addAndGet(messageCount);
+
+            prefetchIdsAllShards();
+            while(unsafeGetNumPrefetchedIds() < messageCount && ((clock.millis() - start) < waitFor)) {
+                Uninterruptibles.sleepUninterruptibly(200, TimeUnit.MILLISECONDS);
+                prefetchIdsAllShards();
+            }
+
+            int numToPop = (unsafeGetNumPrefetchedIds() > messageCount) ? messageCount : unsafeGetNumPrefetchedIds();
+            ConcurrentLinkedQueue<String> messageIds = new ConcurrentLinkedQueue<>();
+            int numPrefetched = 0;
+            for (String shard : allShards) {
+                String queueShardName = getQueueShardKey(queueName, shard);
+                int prefetchedIdsSize = unsafePrefetchedIdsAllShardsMap.get(queueShardName).size();
+                for (int i = 0; i < prefetchedIdsSize; ++i) {
+                    messageIds.add(unsafePrefetchedIdsAllShardsMap.get(queueShardName).poll());
+                    if (++numPrefetched == numToPop) break;
+                }
+                if (numPrefetched == numToPop) break;
+            }
+            return atomicBulkPopHelper(numToPop, messageIds, false);
+        } catch(Exception e) {
+            throw new RuntimeException(e);
+        } finally {
+            sw.stop();
+        }
+    }
+
+    // TODO: Do code cleanup/consolidation
+    private List<Message> atomicBulkPopHelper(int messageCount,
+                          ConcurrentLinkedQueue<String> prefetchedIdQueue, boolean localShardOnly) {
 
         double now = Long.valueOf(clock.millis() + 1).doubleValue();
         double unackScore = Long.valueOf(clock.millis() + unackTime).doubleValue();
@@ -853,7 +894,7 @@ public class RedisDynoQueue implements DynoQueue {
             messageIds.add(prefetchedIdQueue.poll());
         }
 
-        String atomicBulkPopScript="local hkey=KEYS[1]\n" +
+        String atomicBulkPopScriptLocalOnly="local hkey=KEYS[1]\n" +
                 "local num_msgs=ARGV[1]\n" +
                 "local peek_until=ARGV[2]\n" +
                 "local unack_score=ARGV[3]\n" +
@@ -883,25 +924,84 @@ public class RedisDynoQueue implements DynoQueue {
                 "end\n" +
                 "return return_vals";
 
-        String unackShardName = getUnackKey(queueName, shardName);
-
-        ImmutableList.Builder builder = ImmutableList.builder();
-        builder.add(Integer.toString(messageCount));
-        builder.add(nowScoreString);
-        builder.add(unackScoreString);
-        builder.add(localQueueShard);
-        builder.add(unackShardName);
-        for (int i = 0; i < messageCount; ++i) {
-            builder.add(messageIds.get(i));
-        }
+        String atomicBulkPopScript="local hkey=KEYS[1]\n" +
+                "local num_msgs=ARGV[1]\n" +
+                "local num_shards=ARGV[2]\n" +
+                "local peek_until=ARGV[3]\n" +
+                "local unack_score=ARGV[4]\n" +
+                "local shard_start_idx = 5\n" +
+                "local msg_start_idx = 5 + (num_shards * 2)\n" +
+                "local out_idx = 1\n" +
+                "local return_vals={}\n" +
+                "for i=0,num_msgs-1 do\n" +
+                "  local found_msg=false\n" +
+                "  local message_id=ARGV[msg_start_idx + i]\n" +
+                "  for j=0,num_shards-1 do\n" +
+                "    local queue_shard_name=ARGV[shard_start_idx + (j*2)]\n" +
+                "    local unack_shard_name=ARGV[shard_start_idx + (j*2) + 1]\n" +
+                "    local exists = redis.call('zscore', queue_shard_name, message_id)\n" +
+                "    if (exists) then\n" +
+                "      found_msg=true\n" +
+                "      if (exists <=peek_until) then\n" +
+                "        local value = redis.call('hget', hkey, message_id)\n" +
+                "        if (value) then\n" +
+                "          local zadd_ret = redis.call('zadd', unack_shard_name, 'NX', unack_score, message_id)\n" +
+                "          if (zadd_ret) then\n" +
+                "            redis.call('zrem', queue_shard_name, message_id)\n" +
+                "            return_vals[out_idx]=value\n" +
+                "            out_idx=out_idx+1\n" +
+                "            break\n" +
+                "          end\n" +
+                "        end\n" +
+                "      end\n" +
+                "    end\n" +
+                "  end\n" +
+                "  if (found_msg == false) then\n" +
+                "    return {}\n" +
+                "  end\n" +
+                "end\n" +
+                "return return_vals";
 
         List<Message> payloads;
-        // Cast from 'JedisCommands' to 'DynoJedisClient' here since the former does not expose 'eval()'.
-        payloads = (List) ((DynoJedisClient) quorumConn).eval(atomicBulkPopScript,
-                Collections.singletonList(messageStoreKey), builder.build());
+        if (localShardOnly) {
+            String unackShardName = getUnackKey(queueName, shardName);
+
+            ImmutableList.Builder builder = ImmutableList.builder();
+            builder.add(Integer.toString(messageCount));
+            builder.add(nowScoreString);
+            builder.add(unackScoreString);
+            builder.add(localQueueShard);
+            builder.add(unackShardName);
+            for (int i = 0; i < messageCount; ++i) {
+                builder.add(messageIds.get(i));
+            }
+            // Cast from 'JedisCommands' to 'DynoJedisClient' here since the former does not expose 'eval()'.
+            payloads = (List) ((DynoJedisClient) quorumConn).eval(atomicBulkPopScriptLocalOnly,
+                    Collections.singletonList(messageStoreKey), builder.build());
+        } else {
+            ImmutableList.Builder builder = ImmutableList.builder();
+            builder.add(Integer.toString(messageCount));
+            builder.add(Integer.toString(allShards.size()));
+            builder.add(nowScoreString);
+            builder.add(unackScoreString);
+            for (String shard : allShards) {
+                String queueShard = getQueueShardKey(queueName, shard);
+                String unackShardName = getUnackKey(queueName, shard);
+                builder.add(queueShard);
+                builder.add(unackShardName);
+            }
+            for (int i = 0; i < messageCount; ++i) {
+                builder.add(messageIds.get(i));
+            }
+
+            // Cast from 'JedisCommands' to 'DynoJedisClient' here since the former does not expose 'eval()'.
+            payloads = (List) ((DynoJedisClient) quorumConn).eval(atomicBulkPopScript,
+                    Collections.singletonList(messageStoreKey), builder.build());
+        }
 
         return payloads;
     }
+
     /**
      *
      * Similar to popWithMsgId() but completes all the operations in one round trip.
@@ -1005,6 +1105,29 @@ public class RedisDynoQueue implements DynoQueue {
 
             return execute("get", messageStoreKey, () -> {
                 String json = quorumConn.hget(messageStoreKey, messageId);
+                if (json == null) {
+                    logger.warn("Cannot get the message payload " + messageId);
+                    return null;
+                }
+
+                Message msg = om.readValue(json, Message.class);
+                return msg;
+            });
+
+        } finally {
+            sw.stop();
+        }
+    }
+
+    @Override
+    public Message localGet(String messageId) {
+
+        Stopwatch sw = monitor.get.start();
+
+        try {
+
+            return execute("localGet", messageStoreKey, () -> {
+                String json = nonQuorumConn.hget(messageStoreKey, messageId);
                 if (json == null) {
                     logger.warn("Cannot get the message payload " + messageId);
                     return null;

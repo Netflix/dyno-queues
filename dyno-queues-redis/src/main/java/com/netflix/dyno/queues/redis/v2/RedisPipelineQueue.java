@@ -503,6 +503,11 @@ public class RedisPipelineQueue implements DynoQueue {
     }
 
     @Override
+    public List<Message> unsafeBulkPop(int messageCount, int wait, TimeUnit unit) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public Message get(String messageId) {
 
         Stopwatch sw = monitor.get.start();
@@ -526,6 +531,11 @@ public class RedisPipelineQueue implements DynoQueue {
             jedis.close();
             sw.stop();
         }
+    }
+
+    @Override
+    public Message localGet(String messageId) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
