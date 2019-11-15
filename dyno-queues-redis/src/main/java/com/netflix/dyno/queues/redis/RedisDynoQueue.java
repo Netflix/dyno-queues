@@ -921,6 +921,7 @@ public class RedisDynoQueue implements DynoQueue {
                     Collections.singletonList(messageStoreKey), builder.build());
         }
 
+        if (retval.size() == 0) return null;
         return new Message(retval.get(0), retval.get(1));
 
     }
