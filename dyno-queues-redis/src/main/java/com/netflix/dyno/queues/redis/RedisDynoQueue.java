@@ -809,6 +809,136 @@ public class RedisDynoQueue implements DynoQueue {
         });
     }
 
+    private Message popMsgWithPredicateObeyPriority(String predicate, boolean localShardOnly) {
+        String popPredicateObeyPriority = "local hkey=KEYS[1]\n" +
+                "local predicate=ARGV[1]\n" +
+                "local num_shards=ARGV[2]\n" +
+                "local peek_until=tonumber(ARGV[3])\n" +
+                "local unack_score=tonumber(ARGV[4])\n" +
+                "\n" +
+                "local shard_names={}\n" +
+                "local unack_names={}\n" +
+                "local shard_lengths={}\n" +
+                "local largest_shard=-1\n" +
+                "for i=0,num_shards-1 do\n" +
+                "  shard_names[i+1]=ARGV[5+(i*2)]\n" +
+                "  shard_lengths[i+1] = redis.call('zcard', shard_names[i+1])\n" +
+                "  unack_names[i+1]=ARGV[5+(i*2)+1]\n" +
+                "\n" +
+                "  if (shard_lengths[i+1] > largest_shard) then\n" +
+                "    largest_shard = shard_lengths[i+1]\n" +
+                "  end\n" +
+                "end\n" +
+                "\n" +
+                "local min_score=-1\n" +
+                "local min_member\n" +
+                "local matching_value\n" +
+                "local owning_shard_idx=-1\n" +
+                "\n" +
+                "local num_complete_shards=0\n" +
+                "for j=0,largest_shard-1 do\n" +
+                "  for i=1,num_shards do\n" +
+                "    local skiploop=false\n" +
+                "    if (shard_lengths[i] < j+1) then\n" +
+                "      skiploop=true\n" +
+                "    end\n" +
+                "\n" +
+                "    if (skiploop == false) then\n" +
+                "      local element = redis.call('zrange', shard_names[i], j, j, 'WITHSCORES')\n" +
+                "      if ((min_score ~= -1 and min_score < tonumber(element[2])) or peek_until < tonumber(element[2])) then\n" +
+                "        -- This is to make sure we don't process this shard again\n" +
+                "        -- since all elements henceforth are of lower priority than min_member\n" +
+                "        shard_lengths[i]=0\n" +
+                "        num_complete_shards = num_complete_shards + 1\n" +
+                "      else\n" +
+                "        local value = redis.call('hget', hkey, tostring(element[1]))\n" +
+                "        if (string.match(value, predicate)) then\n" +
+                "          if (min_score == -1 or tonumber(element[2]) < min_score) then\n" +
+                "            min_score = tonumber(element[2])\n" +
+                "            owning_shard_idx=i\n" +
+                "            min_member = element[1]\n" +
+                "            matching_value = value\n" +
+                "          end\n" +
+                "        end\n" +
+                "      end\n" +
+                "    end\n" +
+                "  end\n" +
+                "  if (num_complete_shards == num_shards) then\n" +
+                "    break\n" +
+                "  end\n" +
+                "end\n" +
+                "\n" +
+                "if (min_member) then\n" +
+                "  local queue_shard_name=shard_names[owning_shard_idx]\n" +
+                "  local unack_shard_name=unack_names[owning_shard_idx]\n" +
+                "  local zadd_ret = redis.call('zadd', unack_shard_name, 'NX', unack_score, min_member)\n" +
+                "  if (zadd_ret) then\n" +
+                "    redis.call('zrem', queue_shard_name, min_member)\n" +
+                "  end\n" +
+                "end\n" +
+                "return {min_member, matching_value}";
+
+        double now = Long.valueOf(clock.millis() + 1).doubleValue();
+        double unackScore = Long.valueOf(clock.millis() + unackTime).doubleValue();
+
+        // The script requires the scores as whole numbers
+        NumberFormat fmt = NumberFormat.getIntegerInstance();
+        fmt.setGroupingUsed(false);
+        String nowScoreString = fmt.format(now);
+        String unackScoreString = fmt.format(unackScore);
+
+        ArrayList<String> retval;
+        if (localShardOnly) {
+            String unackShardName = getUnackKey(queueName, shardName);
+
+            ImmutableList.Builder builder = ImmutableList.builder();
+            builder.add(predicate);
+            builder.add(Integer.toString(1));
+            builder.add(nowScoreString);
+            builder.add(unackScoreString);
+            builder.add(localQueueShard);
+            builder.add(unackShardName);
+
+            // Cast from 'JedisCommands' to 'DynoJedisClient' here since the former does not expose 'eval()'.
+            retval = (ArrayList) ((DynoJedisClient) quorumConn).eval(popPredicateObeyPriority,
+                    Collections.singletonList(messageStoreKey), builder.build());
+        } else {
+
+            ImmutableList.Builder builder = ImmutableList.builder();
+            builder.add(predicate);
+            builder.add(Integer.toString(allShards.size()));
+            builder.add(nowScoreString);
+            builder.add(unackScoreString);
+            for (String shard : allShards) {
+                String queueShard = getQueueShardKey(queueName, shard);
+                String unackShardName = getUnackKey(queueName, shard);
+                builder.add(queueShard);
+                builder.add(unackShardName);
+            }
+
+            // Cast from 'JedisCommands' to 'DynoJedisClient' here since the former does not expose 'eval()'.
+            retval = (ArrayList) ((DynoJedisClient) quorumConn).eval(popPredicateObeyPriority,
+                    Collections.singletonList(messageStoreKey), builder.build());
+        }
+
+        return new Message(retval.get(0), retval.get(1));
+
+    }
+
+    @Override
+    public Message popMsgWithPredicate(String predicate, boolean localShardOnly) {
+        Stopwatch sw = monitor.start(monitor.pop, 1);
+
+        try {
+            Message payload = execute("popMsgWithPredicateObeyPriority", messageStoreKey, () -> popMsgWithPredicateObeyPriority(predicate, localShardOnly));
+            return payload;
+
+        } finally {
+            sw.stop();
+        }
+
+    }
+
     @Override
     public List<Message> bulkPop(int messageCount, int wait, TimeUnit unit) {
 
@@ -1090,24 +1220,6 @@ public class RedisDynoQueue implements DynoQueue {
         return retval;
     }
 
-    @Override
-    public Message popMsgWithPredicate(String predicate, boolean localShardOnly) {
-        Stopwatch sw = monitor.get.start();
-
-        try {
-            String messageId = getMsgWithPredicate(predicate, localShardOnly);
-            if (messageId == null) {
-                return null;
-            }
-            String payload = execute("atomicPop", messageStoreKey, () -> atomicPopWithMsgIdHelper(messageId, localShardOnly));
-
-            return new Message(messageId, payload);
-
-        } finally {
-            sw.stop();
-        }
-
-    }
 
     @Override
     public Message get(String messageId) {
