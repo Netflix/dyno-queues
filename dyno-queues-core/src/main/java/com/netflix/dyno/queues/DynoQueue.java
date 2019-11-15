@@ -169,7 +169,9 @@ public interface DynoQueue extends Closeable {
     public String getMsgWithPredicate(String predicate, boolean localShardOnly);
 
 	/**
-	 * Same as getMsgWithPredicate(), but it also pops the item if found.
+	 * Pops the message with the highest priority that matches 'predicate'.
+	 *
+	 * Note: Can be slow for large queues.
 	 *
 	 * @param predicate The predicate to check against.
 	 * @param localShardOnly If this is true, it will only check if the message exists in the local shard as opposed to
