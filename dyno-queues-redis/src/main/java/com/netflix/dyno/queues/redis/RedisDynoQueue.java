@@ -878,7 +878,7 @@ public class RedisDynoQueue implements DynoQueue {
 
     // TODO: Do code cleanup/consolidation
     private List<Message> atomicBulkPopHelper(int messageCount,
-                          ConcurrentLinkedQueue<String> prefetchedIdQueue, boolean localShardOnly) {
+                          ConcurrentLinkedQueue<String> prefetchedIdQueue, boolean localShardOnly) throws IOException {
 
         double now = Long.valueOf(clock.millis() + 1).doubleValue();
         double unackScore = Long.valueOf(clock.millis() + unackTime).doubleValue();
@@ -962,7 +962,7 @@ public class RedisDynoQueue implements DynoQueue {
                 "end\n" +
                 "return return_vals";
 
-        List<Message> payloads;
+        List<Message> payloads = new ArrayList<>();
         if (localShardOnly) {
             String unackShardName = getUnackKey(queueName, shardName);
 
@@ -975,9 +975,16 @@ public class RedisDynoQueue implements DynoQueue {
             for (int i = 0; i < messageCount; ++i) {
                 builder.add(messageIds.get(i));
             }
+
+            List<String> jsonPayloads;
             // Cast from 'JedisCommands' to 'DynoJedisClient' here since the former does not expose 'eval()'.
-            payloads = (List) ((DynoJedisClient) quorumConn).eval(atomicBulkPopScriptLocalOnly,
+            jsonPayloads = (List) ((DynoJedisClient) quorumConn).eval(atomicBulkPopScriptLocalOnly,
                     Collections.singletonList(messageStoreKey), builder.build());
+
+            for (String p : jsonPayloads) {
+                Message msg = om.readValue(p, Message.class);
+                payloads.add(msg);
+            }
         } else {
             ImmutableList.Builder builder = ImmutableList.builder();
             builder.add(Integer.toString(messageCount));
@@ -994,9 +1001,15 @@ public class RedisDynoQueue implements DynoQueue {
                 builder.add(messageIds.get(i));
             }
 
+            List<String> jsonPayloads;
             // Cast from 'JedisCommands' to 'DynoJedisClient' here since the former does not expose 'eval()'.
-            payloads = (List) ((DynoJedisClient) quorumConn).eval(atomicBulkPopScript,
+            jsonPayloads = (List) ((DynoJedisClient) quorumConn).eval(atomicBulkPopScript,
                     Collections.singletonList(messageStoreKey), builder.build());
+
+            for (String p : jsonPayloads) {
+                Message msg = om.readValue(p, Message.class);
+                payloads.add(msg);
+            }
         }
 
         return payloads;
