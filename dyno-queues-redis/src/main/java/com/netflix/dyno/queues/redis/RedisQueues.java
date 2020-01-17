@@ -15,6 +15,7 @@
  */
 package com.netflix.dyno.queues.redis;
 
+import com.netflix.dyno.jedis.DynoJedisClient;
 import com.netflix.dyno.queues.DynoQueue;
 import com.netflix.dyno.queues.ShardSupplier;
 import com.netflix.dyno.queues.redis.sharding.RoundRobinStrategy;
@@ -55,6 +56,8 @@ public class RedisQueues implements Closeable {
     private final ConcurrentHashMap<String, DynoQueue> queues;
 
     private final ShardingStrategy shardingStrategy;
+
+    private final boolean singleRingTopology;
 
     /**
      * @param quorumConn Dyno connection with dc_quorum enabled
@@ -103,6 +106,7 @@ public class RedisQueues implements Closeable {
         this.unackHandlerIntervalInMS = unackHandlerIntervalInMS;
         this.queues = new ConcurrentHashMap<>();
         this.shardingStrategy = shardingStrategy;
+        this.singleRingTopology = ((DynoJedisClient) quorumConn).getConnPool().getPools().size() == 3;
     }
 
     /**
@@ -116,7 +120,7 @@ public class RedisQueues implements Closeable {
 
         String key = queueName.intern();
 
-        return queues.computeIfAbsent(key, (keyToCompute) -> new RedisDynoQueue(clock, redisKeyPrefix, queueName, allShards, shardName, unackHandlerIntervalInMS, shardingStrategy)
+        return queues.computeIfAbsent(key, (keyToCompute) -> new RedisDynoQueue(clock, redisKeyPrefix, queueName, allShards, shardName, unackHandlerIntervalInMS, shardingStrategy, singleRingTopology)
                 .withUnackTime(unackTime)
                 .withNonQuorumConn(nonQuorumConn)
                 .withQuorumConn(quorumConn));

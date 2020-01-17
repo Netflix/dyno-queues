@@ -190,6 +190,15 @@ public interface DynoQueue extends Closeable {
 
 	/**
 	 *
+	 * Attempts to return all the messages found in the hashmap. It's a best-effort return of all payloads, i.e. it may
+	 * not 100% match with what's in the queue metadata at any given time and is read with a non-quorum connection.
+	 *
+	 * @return Returns a list of all messages found in the message hashmap.
+	 */
+    public List<Message> getAllMessages();
+
+	/**
+	 *
 	 * Same as get(), but uses the non quorum connection.
 	 * @param messageId message to be retrieved.
 	 * @return Retrieves the message stored in the queue by the messageId.  Null if not found.
@@ -222,6 +231,7 @@ public interface DynoQueue extends Closeable {
      * Process un-acknowledged messages.  The messages which are polled by the client but not ack'ed are moved back to queue
      */
     public void processUnacks();
+	public void atomicProcessUnacks();
 
 	/*
 	 * <=== Begin unsafe* functions. ===>

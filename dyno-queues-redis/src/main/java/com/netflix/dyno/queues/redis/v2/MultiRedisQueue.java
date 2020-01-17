@@ -243,10 +243,20 @@ public class MultiRedisQueue implements DynoQueue {
     }
 
     @Override
+    public List<Message> getAllMessages() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void processUnacks() {
         for (RedisPipelineQueue queue : queues.values()) {
             queue.processUnacks();
         }
+    }
+
+    @Override
+    public void atomicProcessUnacks() {
+        throw new UnsupportedOperationException();
     }
 
     private AtomicInteger nextShardIndex = new AtomicInteger(0);

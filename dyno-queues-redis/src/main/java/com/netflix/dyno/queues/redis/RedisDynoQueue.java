@@ -87,6 +87,8 @@ public class RedisDynoQueue implements DynoQueue {
 
     private final ShardingStrategy shardingStrategy;
 
+    private final boolean singleRingTopology;
+
     // Tracks the number of message IDs to prefetch based on the message counts requested by the caller via pop().
     @VisibleForTesting
     AtomicInteger numIdsToPrefetch;
@@ -96,15 +98,15 @@ public class RedisDynoQueue implements DynoQueue {
     @VisibleForTesting
     AtomicInteger unsafeNumIdsToPrefetchAllShards;
 
-    public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, ShardingStrategy shardingStrategy) {
-        this(redisKeyPrefix, queueName, allShards, shardName, 60_000, shardingStrategy);
+    public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, ShardingStrategy shardingStrategy, boolean singleRingTopology) {
+        this(redisKeyPrefix, queueName, allShards, shardName, 60_000, shardingStrategy, singleRingTopology);
     }
 
-    public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, int unackScheduleInMS, ShardingStrategy shardingStrategy) {
-        this(Clock.systemDefaultZone(), redisKeyPrefix, queueName, allShards, shardName, unackScheduleInMS, shardingStrategy);
+    public RedisDynoQueue(String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, int unackScheduleInMS, ShardingStrategy shardingStrategy, boolean singleRingTopology) {
+        this(Clock.systemDefaultZone(), redisKeyPrefix, queueName, allShards, shardName, unackScheduleInMS, shardingStrategy, singleRingTopology);
     }
 
-    public RedisDynoQueue(Clock clock, String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, int unackScheduleInMS, ShardingStrategy shardingStrategy) {
+    public RedisDynoQueue(Clock clock, String redisKeyPrefix, String queueName, Set<String> allShards, String shardName, int unackScheduleInMS, ShardingStrategy shardingStrategy, boolean singleRingTopology) {
         this.clock = clock;
         this.redisKeyPrefix = redisKeyPrefix;
         this.queueName = queueName;
@@ -116,6 +118,7 @@ public class RedisDynoQueue implements DynoQueue {
 
         this.numIdsToPrefetch = new AtomicInteger(0);
         this.unsafeNumIdsToPrefetchAllShards = new AtomicInteger(0);
+        this.singleRingTopology = singleRingTopology;
 
         this.om = QueueUtils.constructObjectMapper();
         this.monitor = new QueueMonitor(queueName, shardName);
@@ -127,7 +130,11 @@ public class RedisDynoQueue implements DynoQueue {
 
         schedulerForUnacksProcessing = Executors.newScheduledThreadPool(1);
 
-        schedulerForUnacksProcessing.scheduleAtFixedRate(() -> processUnacks(), unackScheduleInMS, unackScheduleInMS, TimeUnit.MILLISECONDS);
+        if (this.singleRingTopology) {
+            schedulerForUnacksProcessing.scheduleAtFixedRate(() -> atomicProcessUnacks(), unackScheduleInMS, unackScheduleInMS, TimeUnit.MILLISECONDS);
+        } else {
+            schedulerForUnacksProcessing.scheduleAtFixedRate(() -> processUnacks(), unackScheduleInMS, unackScheduleInMS, TimeUnit.MILLISECONDS);
+        }
 
         logger.info(RedisDynoQueue.class.getName() + " is ready to serve " + queueName);
     }
@@ -1246,6 +1253,18 @@ public class RedisDynoQueue implements DynoQueue {
     }
 
     @Override
+    public List<Message> getAllMessages() {
+        Map<String, String> allMsgs = nonQuorumConn.hgetAll(messageStoreKey);
+        List<Message> retList = new ArrayList<>();
+        for (Map.Entry<String,String> entry: allMsgs.entrySet()) {
+            Message msg = new Message(entry.getKey(), entry.getValue());
+            retList.add(msg);
+        }
+
+        return retList;
+    }
+
+    @Override
     public Message localGet(String messageId) {
 
         Stopwatch sw = monitor.get.start();
@@ -1330,6 +1349,7 @@ public class RedisDynoQueue implements DynoQueue {
     @Override
     public void processUnacks() {
 
+        logger.info("processUnacks() will NOT be atomic.");
         Stopwatch sw = monitor.processUnack.start();
         try {
 
@@ -1369,6 +1389,94 @@ public class RedisDynoQueue implements DynoQueue {
                     if (added_back > 0 && removed_from_unack > 0) ++num_moved_back;
                 }
 
+                if (num_moved_back > 0 || num_stale > 0) {
+                    logger.info("processUnacks: Moved back " + num_moved_back + " items. Got rid of " + num_stale + " stale items.");
+                }
+                return null;
+            });
+
+        } catch (Exception e) {
+            logger.error("Error while processing unacks. " + e.getMessage());
+        } finally {
+            sw.stop();
+        }
+
+    }
+
+    @Override
+    public void atomicProcessUnacks() {
+
+        logger.info("processUnacks() will be atomic.");
+        Stopwatch sw = monitor.processUnack.start();
+        try {
+
+            long queueDepth = size();
+            monitor.queueDepth.record(queueDepth);
+
+            String keyName = getUnackKey(queueName, shardName);
+            execute("processUnacks", keyName, () -> {
+
+                int batchSize = 1_000;
+                String unackShardName = getUnackKey(queueName, shardName);
+
+                double now = Long.valueOf(clock.millis()).doubleValue();
+                long num_moved_back = 0;
+                long num_stale = 0;
+
+                Set<Tuple> unacks = nonQuorumConn.zrangeByScoreWithScores(unackShardName, 0, now, 0, batchSize);
+
+                if (unacks.size() > 0) {
+                    logger.info("processUnacks: Attempting to add " + unacks.size() + " messages back to shard of queue: " + unackShardName);
+                } else {
+                    return null;
+                }
+
+                String atomicProcessUnacksScript = "local hkey=KEYS[1]\n" +
+                        "local unack_shard=ARGV[1]\n" +
+                        "local queue_shard=ARGV[2]\n" +
+                        "local num_unacks=ARGV[3]\n" +
+                        "\n" +
+                        "local unacks={}\n" +
+                        "local unack_scores={}\n" +
+                        "local unack_start_idx = 4\n" +
+                        "for i=0,num_unacks-1 do\n" +
+                        "  unacks[i]=ARGV[4 + (i*2)]\n" +
+                        "  unack_scores[i]=ARGV[4+(i*2)+1]\n" +
+                        "end\n" +
+                        "\n" +
+                        "local num_moved=0\n" +
+                        "local num_stale=0\n" +
+                        "for i=0,num_unacks-1 do\n" +
+                        "  local mem_val = redis.call('hget', hkey, unacks[i])\n" +
+                        "  if (mem_val) then\n" +
+                        "    redis.call('zadd', queue_shard, unack_scores[i], unacks[i])\n" +
+                        "    redis.call('zrem', unack_shard, unacks[i])\n" +
+                        "    num_moved=num_moved+1\n" +
+                        "  else\n" +
+                        "    redis.call('zrem', unack_shard, unacks[i])\n" +
+                        "    num_stale=num_stale+1\n" +
+                        "  end\n" +
+                        "end\n" +
+                        "\n" +
+                        "return {num_moved, num_stale}\n";
+
+                ImmutableList.Builder builder = ImmutableList.builder();
+                builder.add(unackShardName);
+                builder.add(localQueueShard);
+                builder.add(Integer.toString(unacks.size()));
+                for (Tuple unack : unacks) {
+                    builder.add(unack.getElement());
+
+                    // The script requires the scores as whole numbers
+                    NumberFormat fmt = NumberFormat.getIntegerInstance();
+                    fmt.setGroupingUsed(false);
+                    String unackScoreString = fmt.format(unack.getScore());
+                    builder.add(unackScoreString);
+                }
+
+                ArrayList<Long> retval = (ArrayList) ((DynoJedisClient)quorumConn).eval(atomicProcessUnacksScript, Collections.singletonList(messageStoreKey), builder.build());
+                num_moved_back = retval.get(0).longValue();
+                num_stale = retval.get(1).longValue();
                 if (num_moved_back > 0 || num_stale > 0) {
                     logger.info("processUnacks: Moved back " + num_moved_back + " items. Got rid of " + num_stale + " stale items.");
                 }

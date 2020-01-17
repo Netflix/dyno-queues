@@ -680,6 +680,16 @@ public class RedisPipelineQueue implements DynoQueue {
     }
 
     @Override
+    public List<Message> getAllMessages() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void atomicProcessUnacks() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void close() throws IOException {
         schedulerForUnacksProcessing.shutdown();
         monitor.close();
