@@ -106,7 +106,12 @@ public class RedisQueues implements Closeable {
         this.unackHandlerIntervalInMS = unackHandlerIntervalInMS;
         this.queues = new ConcurrentHashMap<>();
         this.shardingStrategy = shardingStrategy;
-        this.singleRingTopology = ((DynoJedisClient) quorumConn).getConnPool().getPools().size() == 3;
+
+        if (quorumConn instanceof DynoJedisClient) {
+            this.singleRingTopology = ((DynoJedisClient) quorumConn).getConnPool().getPools().size() == 3;
+        } else {
+            this.singleRingTopology = false;
+        }
     }
 
     /**
