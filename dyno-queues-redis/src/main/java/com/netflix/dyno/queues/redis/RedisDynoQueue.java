@@ -859,12 +859,14 @@ public class RedisDynoQueue implements DynoQueue {
                 "        num_complete_shards = num_complete_shards + 1\n" +
                 "      else\n" +
                 "        local value = redis.call('hget', hkey, tostring(element[1]))\n" +
-                "        if (string.match(value, predicate)) then\n" +
-                "          if (min_score == -1 or tonumber(element[2]) < min_score) then\n" +
-                "            min_score = tonumber(element[2])\n" +
-                "            owning_shard_idx=i\n" +
-                "            min_member = element[1]\n" +
-                "            matching_value = value\n" +
+                "        if (value) then\n" +
+                "          if (string.match(value, predicate)) then\n" +
+                "            if (min_score == -1 or tonumber(element[2]) < min_score) then\n" +
+                "              min_score = tonumber(element[2])\n" +
+                "              owning_shard_idx=i\n" +
+                "              min_member = element[1]\n" +
+                "              matching_value = value\n" +
+                "            end\n" +
                 "          end\n" +
                 "        end\n" +
                 "      end\n" +
