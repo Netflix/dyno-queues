@@ -711,6 +711,62 @@ public class RedisDynoQueue implements DynoQueue {
     }
 
     @Override
+    public boolean atomicRemove(String messageId) {
+
+        Stopwatch sw = monitor.remove.start();
+
+        try {
+
+            return execute("remove", "(a shard in) " + queueName, () -> {
+
+
+                String atomicRemoveScript = "local hkey=KEYS[1]\n" +
+                        "local msg_id=ARGV[1]\n" +
+                        "local num_shards=ARGV[2]\n" +
+                        "\n" +
+                        "local removed_shard=0\n" +
+                        "local removed_unack=0\n" +
+                        "local removed_hash=0\n" +
+                        "for i=0,num_shards-1 do\n" +
+                        "  local shard_name = ARGV[3+(i*2)]\n" +
+                        "  local unack_name = ARGV[3+(i*2)+1]\n" +
+                        "\n" +
+                        "  removed_shard = removed_shard + redis.call('zrem', shard_name, msg_id)\n" +
+                        "  removed_unack = removed_unack + redis.call('zrem', unack_name, msg_id)\n" +
+                        "end\n" +
+                        "\n" +
+                        "removed_hash = redis.call('hdel', hkey, msg_id)\n" +
+                        "if (removed_shard==1 or removed_unack==1 or removed_hash==1) then\n" +
+                        "  return 1\n" +
+                        "end\n" +
+                        "return removed_unack\n";
+
+                ImmutableList.Builder builder = ImmutableList.builder();
+                builder.add(messageId);
+                builder.add(Integer.toString(allShards.size()));
+
+                for (String shard : allShards) {
+
+                    String queueShardKey = getQueueShardKey(queueName, shard);
+                    String unackShardKey = getUnackKey(queueName, shard);
+
+                    builder.add(queueShardKey);
+                    builder.add(unackShardKey);
+                }
+
+                Long removed = (Long) ((DynoJedisClient)quorumConn).eval(atomicRemoveScript, Collections.singletonList(messageStoreKey), builder.build());
+                if (removed == 1) return true;
+
+                return false;
+
+            });
+
+        } finally {
+            sw.stop();
+        }
+    }
+
+    @Override
     public boolean ensure(Message message) {
         return execute("ensure", "(a shard in) " + queueName, () -> {
 

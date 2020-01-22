@@ -259,6 +259,11 @@ public class MultiRedisQueue implements DynoQueue {
         throw new UnsupportedOperationException();
     }
 
+    @Override
+    public boolean atomicRemove(String messageId) {
+        throw new UnsupportedOperationException();
+    }
+
     private AtomicInteger nextShardIndex = new AtomicInteger(0);
 
     private String getNextShard() {
