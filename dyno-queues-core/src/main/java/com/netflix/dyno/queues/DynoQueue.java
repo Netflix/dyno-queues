@@ -234,6 +234,16 @@ public interface DynoQueue extends Closeable {
     public void processUnacks();
 	public void atomicProcessUnacks();
 
+	/**
+	 *
+	 * Attempts to return the items present in the local queue shard but not in the hashmap, if any.
+	 * (Ideally, we would not require this function, however, in some configurations, especially with multi-region write
+	 * traffic sharing the same queue, we may find ourselves with stale items in the queue shards)
+	 *
+	 * @return List of stale messages IDs.
+	 */
+	public List<Message> findStaleMessages();
+
 	/*
 	 * <=== Begin unsafe* functions. ===>
 	 *
