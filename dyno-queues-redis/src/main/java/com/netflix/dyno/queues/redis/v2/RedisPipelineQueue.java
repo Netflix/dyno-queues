@@ -690,6 +690,9 @@ public class RedisPipelineQueue implements DynoQueue {
     }
 
     @Override
+    public List<Message> findStaleMessages() { throw new UnsupportedOperationException(); }
+
+    @Override
     public boolean atomicRemove(String messageId) {
         throw new UnsupportedOperationException();
     }
