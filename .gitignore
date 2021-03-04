@@ -13,3 +13,6 @@ redis-3.0.7.tar.gz
 
 dyno-queues-core/out/
 dyno-queues-redis/out/
+
+# publishing secrets
+secrets/signing-key
