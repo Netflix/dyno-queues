@@ -142,12 +142,26 @@ public interface DynoQueue extends Closeable {
      * worst case. Use mindfully.
      *
      * @param predicate The predicate to check against.
-     * @param localShardOnly If this is true, it will only check if the message exists in the local shard as opposed to
-     *                       all shards. Note that this will only work if the Dynomite cluster ring size is 1 (i.e. one
-     *                       instance per AZ).
      * @return 'true' if any of the messages contain 'predicate'; 'false' otherwise.
      */
-    public boolean containsPredicate(String predicate);
+	public boolean containsPredicate(String predicate);
+
+	/**
+	 * Checks the message bodies (i.e. the data in the hash map), and returns true on the first match with
+	 * 'predicate'.
+	 *
+	 * Matching is done based on 'lua pattern' matching.
+	 * http://lua-users.org/wiki/PatternsTutorial
+	 *
+	 * Disclaimer: This is a potentially expensive call, since we will iterate over the entire hash map in the
+	 * worst case. Use mindfully.
+	 *
+	 * @param predicate The predicate to check against.
+	 * @param localShardOnly If this is true, it will only check if the message exists in the local shard as opposed to
+	 *                       all shards. Note that this will only work if the Dynomite cluster ring size is 1 (i.e. one
+	 *                       instance per AZ).
+	 * @return 'true' if any of the messages contain 'predicate'; 'false' otherwise.
+	 */
     public boolean containsPredicate(String predicate, boolean localShardOnly);
 
     /**
@@ -161,12 +175,26 @@ public interface DynoQueue extends Closeable {
      * worst case. Use mindfully.
      *
      * @param predicate The predicate to check against.
-     * @param localShardOnly If this is true, it will only check if the message exists in the local shard as opposed to
-     *                       all shards. Note that this will only work if the Dynomite cluster ring size is 1 (i.e. one
-     *                       instance per AZ).
      * @return Message ID as string if any of the messages contain 'predicate'; 'null' otherwise.
      */
     public String getMsgWithPredicate(String predicate);
+
+	/**
+	 * Checks the message bodies (i.e. the data in the hash map), and returns the ID of the first message to match with
+	 * 'predicate'.
+	 *
+	 * Matching is done based on 'lua pattern' matching.
+	 * http://lua-users.org/wiki/PatternsTutorial
+	 *
+	 * Disclaimer: This is a potentially expensive call, since we will iterate over the entire hash map in the
+	 * worst case. Use mindfully.
+	 *
+	 * @param predicate The predicate to check against.
+	 * @param localShardOnly If this is true, it will only check if the message exists in the local shard as opposed to
+	 *                       all shards. Note that this will only work if the Dynomite cluster ring size is 1 (i.e. one
+	 *                       instance per AZ).
+	 * @return Message ID as string if any of the messages contain 'predicate'; 'null' otherwise.
+	 */
     public String getMsgWithPredicate(String predicate, boolean localShardOnly);
 
 	/**
@@ -261,7 +289,7 @@ public interface DynoQueue extends Closeable {
 	 * Provides a peek into all shards of the queue without taking messages out.
 	 * Note: This function does not guarantee ordering of items based on shards like unsafePopAllShards().
 	 *
-	 * @param count The number of messages to peek.
+	 * @param messageCount The number of messages to peek.
 	 * @return A list of up to 'count' messages.
 	 */
 	public List<Message> unsafePeekAllShards(final int messageCount);
