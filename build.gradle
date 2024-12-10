@@ -13,7 +13,7 @@ buildscript {
 }
 
 plugins {
-    id 'nebula.netflixoss' version '9.1.0'
+    id 'com.netflix.nebula.netflixoss' version '11.5.0'
 }
 
 // Establish version and status
@@ -23,7 +23,7 @@ apply plugin: 'project-report'
 
 subprojects {
     apply plugin: 'nebula.netflixoss'
-    apply plugin: 'java'
+    apply plugin: 'java-library'
     apply plugin: 'project-report'
 
     sourceCompatibility = 1.8

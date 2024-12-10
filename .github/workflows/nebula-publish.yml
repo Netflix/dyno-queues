@@ -22,7 +22,10 @@ jobs:
         ports:
           - 6379:6379
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
+      - run: |
+          git config --global user.name "Netflix OSS Maintainers"
+          git config --global user.email "netflixoss@netflix.com"
       - name: Setup jdk 8
         uses: actions/setup-java@v1
         with:
