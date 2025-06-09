@@ -1,17 +1,20 @@
 dependencies {
     
-    compile  project(':dyno-queues-core')
-    
-    compile "com.google.inject:guice:3.0"
-    compile 'com.netflix.dyno:dyno-core:1.5.9'
-    compile "com.netflix.dyno:dyno-jedis:1.5.9"
-    compile "com.netflix.archaius:archaius-core:0.7.5"
-    compile "com.netflix.servo:servo-core:0.12.17"
-    compile 'com.netflix.eureka:eureka-client:1.8.1'
-    compile 'com.fasterxml.jackson.core:jackson-databind:2.4.4'
-    
-    testCompile 'org.rarefiedredis.redis:redis-java:0.0.17'
-    testCompile "junit:junit:4.11"    
+    api  project(':dyno-queues-core')
+
+    api "com.google.inject:guice:3.0"
+
+    api 'com.netflix.dyno:dyno-core:1.7.2-rc2'
+    api 'com.netflix.dyno:dyno-jedis:1.7.2-rc2'
+    api 'com.netflix.dyno:dyno-demo:1.7.2-rc2'
+
+    api 'com.netflix.archaius:archaius-core:0.7.5'
+    api 'com.netflix.servo:servo-core:0.12.17'
+    api 'com.netflix.eureka:eureka-client:1.8.1'
+    api 'com.fasterxml.jackson.core:jackson-databind:2.4.4'
+
+    testImplementation 'org.rarefiedredis.redis:redis-java:0.0.17'
+    testImplementation "junit:junit:4.11"
 }
 
 tasks.withType(Test)  {

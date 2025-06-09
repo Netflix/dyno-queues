@@ -1,16 +1,19 @@
 buildscript {
-
-	repositories {
-        jcenter()
+    repositories {
+        mavenCentral()
+        maven {
+            url = 'https://plugins.gradle.org/m2'
+        }
     }
     
     dependencies {
-        classpath 'com.netflix.nebula:gradle-aggregate-javadocs-plugin:2.2.+'
-        classpath 'com.netflix.nebula:gradle-extra-configurations-plugin:3.0.3'
+        classpath 'com.netflix.nebula:gradle-aggregate-javadocs-plugin:3.0.1'
+        classpath 'com.netflix.nebula:gradle-extra-configurations-plugin:4.0.1'
     }
 }
+
 plugins {
-    id 'nebula.netflixoss' version '3.6.0'
+    id 'com.netflix.nebula.netflixoss' version '11.5.0'
 }
 
 // Establish version and status
@@ -19,18 +22,20 @@ ext.githubProjectName = rootProject.name // Change if github project name is not
 apply plugin: 'project-report'
 
 subprojects {
-
     apply plugin: 'nebula.netflixoss'
-    apply plugin: 'java'
-    apply plugin: 'idea'
-    apply plugin: 'eclipse'
+    apply plugin: 'java-library'
     apply plugin: 'project-report'
 
     sourceCompatibility = 1.8
     targetCompatibility = 1.8
 
-	repositories {
-        jcenter()
+    repositories {
+        mavenCentral()
+
+        // oss-candidate for -rc.* verions:
+        maven {
+            url  "https://dl.bintray.com/netflixoss/oss-candidate"
+        }
     }
     
     group = "com.netflix.${githubProjectName}"
