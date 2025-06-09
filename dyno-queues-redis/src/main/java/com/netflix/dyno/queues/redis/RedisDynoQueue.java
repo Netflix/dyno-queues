@@ -689,14 +689,14 @@ public class RedisDynoQueue implements DynoQueue {
                 for (String shard : allShards) {
 
                     String unackShardKey = getUnackKey(queueName, shard);
-                    quorumConn.zrem(unackShardKey, messageId);
+                    Long removedFromUnack = quorumConn.zrem(unackShardKey, messageId);
 
                     String queueShardKey = getQueueShardKey(queueName, shard);
-                    Long removed = quorumConn.zrem(queueShardKey, messageId);
+                    Long removedFromQueue = quorumConn.zrem(queueShardKey, messageId);
 
-                    if (removed > 0) {
+                    if ((removedFromUnack != null && removedFromUnack > 0) || (removedFromQueue != null && removedFromQueue > 0)) {
                         // Ignoring return value since we just want to get rid of it.
-                        Long msgRemoved = quorumConn.hdel(messageStoreKey, messageId);
+                        quorumConn.hdel(messageStoreKey, messageId);
                         return true;
                     }
                 }
@@ -709,7 +709,7 @@ public class RedisDynoQueue implements DynoQueue {
             sw.stop();
         }
     }
-
+    
     @Override
     public boolean atomicRemove(String messageId) {
 

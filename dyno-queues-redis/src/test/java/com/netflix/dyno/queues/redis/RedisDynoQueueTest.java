@@ -363,6 +363,29 @@ public class RedisDynoQueueTest {
     }
 
     @Test
+    public void testRemoveWhenMessageHasBeenPopped() {
+        List<Message> messages = new LinkedList<>();
+        Message msg = new Message("1", "Hello World");
+        msg.setPriority(1);
+        messages.add(msg);
+        rdq.push(messages);
+        rdq.pop(1, 1, TimeUnit.SECONDS);
+        rdq.remove(msg.getId());
+        assertEquals(0, (long) dynoClient.hlen(messageKey));
+    }
+
+    @Test
+    public void testRemoveWhenMessageHasNotBeenPopped() {
+        List<Message> messages = new LinkedList<>();
+        Message msg = new Message("1", "Hello World");
+        msg.setPriority(1);
+        messages.add(msg);
+        rdq.push(messages);
+        rdq.remove(msg.getId());
+        assertEquals(0, (long) dynoClient.hlen(messageKey));
+    }
+
+    @Test
     public void testClearQueues() {
         rdq.clear();
         int count = 10;
@@ -379,5 +402,4 @@ public class RedisDynoQueueTest {
         assertEquals(0, rdq.size());
 
     }
-
 }
